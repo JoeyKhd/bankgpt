@@ -108,3 +108,21 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `AGENTS.md`. Documentation review found no substantive requirement or scope
   issues; all 11 relative Markdown links resolve and the first staged diff
   passed `git diff --cached --check`.
+
+### D-005 — 2026-09-08T19:50:12Z — Adopt the owner's shared agent conventions
+
+- **Status:** accepted
+- **Decision/change:** Expanded `AGENTS.md` with the general conventions from
+  the owner's other project: save taught conventions in the repo immediately,
+  keep the focused emoji commit + push workflow with explicit commit-safety
+  limits, prefer context7/tavily when available, verify markdown claims against
+  code before acting, protect secrets, and keep `context/` a curated knowledge
+  base.
+- **Why:** The project owner asked for the same conventions here, keeping only
+  what is relevant to this repository.
+- **Consequences/follow-up:** Project-specific stack, brand, layout, and
+  checklists from the other repository were deliberately excluded. No
+  package manager, framework, or toolchain is prescribed yet; that stays open
+  until the owner explains how this project will be built.
+- **References:** Project owner's shared `AGENTS.md` conventions; D-004;
+  `AGENTS.md`.
