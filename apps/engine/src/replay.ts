@@ -103,21 +103,39 @@ export const validateInputs = (
   return clean
 }
 
-/** Resolve a recorded target to a live locator: primary a11y first, then fallbacks. */
-const resolveTarget = (page: Page, target: Target): Locator => {
-  const candidates: Locator[] = [
-    page.getByRole(target.primary.role as never, {
-      name: target.primary.name,
-      exact: target.primary.exact,
-    }),
-  ]
-  if (target.fallbacks?.css) candidates.push(page.locator(target.fallbacks.css))
-  if (target.fallbacks?.text) {
-    candidates.push(page.getByText(target.fallbacks.text, { exact: false }))
+/** Build a Playwright locator for one recorded locator candidate. */
+const toLocator = (page: Page, candidate: Target["primary"]): Locator => {
+  switch (candidate.strategy) {
+    case "a11y":
+      return page.getByRole(candidate.role as never, {
+        name: candidate.name ?? "",
+        exact: candidate.exact,
+      })
+    case "css":
+      return page.locator(candidate.css ?? "")
+    case "text":
+      return page.getByText(candidate.text ?? "", { exact: false })
   }
+}
+
+/** Short human-readable description of a locator, for logs and errors. */
+const describeLocator = (candidate: Target["primary"]): string => {
+  switch (candidate.strategy) {
+    case "a11y":
+      return `${candidate.role}[name=${JSON.stringify(candidate.name ?? "")}]`
+    case "css":
+      return `css(${candidate.css ?? ""})`
+    case "text":
+      return `text(${JSON.stringify(candidate.text ?? "")})`
+  }
+}
+
+/** Resolve a recorded target to a live locator: primary first, then fallbacks. */
+const resolveTarget = (page: Page, target: Target): Locator => {
+  const candidates = [target.primary, ...target.fallbacks]
   // first() on the OR chain: Playwright resolves the first candidate that
-  // matches, in order, when the locator is awaited.
-  return candidates.reduce((acc, l) => acc.or(l))
+  // matches, in recorded order, when the locator is awaited.
+  return candidates.map((c) => toLocator(page, c)).reduce((acc, l) => acc.or(l))
 }
 
 /** Assert one checkpoint condition set against the live page. */
@@ -157,7 +175,7 @@ const checkCheckpoint = async (
     } catch {
       return {
         ok: false,
-        detail: `expected element (role "${checkpoint.elementPresent.primary.role}" named "${checkpoint.elementPresent.primary.name}") not present within ${timeout}ms`,
+        detail: `expected element ${describeLocator(checkpoint.elementPresent.primary)} not present within ${timeout}ms`,
       }
     }
   }
@@ -203,13 +221,13 @@ const executeStep = async (
     case "click": {
       if (!step.target) throw new Error("click step needs a target")
       await resolveTarget(page, step.target).first().click()
-      return `clicked ${step.target.primary.role} "${step.target.primary.name}"`
+      return `clicked ${describeLocator(step.target.primary)}`
     }
     case "type": {
       if (!step.target) throw new Error("type step needs a target")
       const value = step.value ? substitute(step.value, inputs) : ""
       await resolveTarget(page, step.target).first().fill(value)
-      return `typed into ${step.target.primary.role} "${step.target.primary.name}"`
+      return `typed into ${describeLocator(step.target.primary)}`
     }
     case "select": {
       if (!step.target) throw new Error("select step needs a target")
@@ -217,7 +235,7 @@ const executeStep = async (
       await resolveTarget(page, step.target)
         .first()
         .selectOption({ label: value })
-      return `selected "${value}" in "${step.target.primary.name}"`
+      return `selected "${value}" in ${describeLocator(step.target.primary)}`
     }
     case "press": {
       if (!step.key) throw new Error("press step needs a key")
@@ -303,6 +321,14 @@ export const replayCapability = async (
   const outputs: Record<string, string | number | boolean> = {}
   let stepsExecuted = 0
 
+  // Bootstrap: replay must START at the recorded surface. When the first
+  // step is not itself a navigate, open the artifact's targetApp first.
+  if (artifact.steps[0]?.action !== "navigate") {
+    const entryUrl = artifact.targetApp
+    assertUrlAllowed(policy, entryUrl)
+    await page.goto(entryUrl, { waitUntil: "domcontentloaded" })
+  }
+
   const fail = async (
     step: number,
     expected: string,
@@ -384,9 +410,7 @@ export const replayCapability = async (
         stepIndex: i,
         at: new Date(stepStart).toISOString(),
         action: step.action,
-        target: step.target
-          ? `${step.target.primary.role}[name=${JSON.stringify(step.target.primary.name)}]`
-          : step.url,
+        target: step.target ? describeLocator(step.target.primary) : step.url,
         reason: ok && detail ? `${step.intent} — ${detail}` : step.intent,
         durationMs: Date.now() - stepStart,
         result: ok ? "ok" : "failed",
@@ -441,7 +465,9 @@ const describeCheckpoint = (c: Checkpoint): string =>
   [
     c.urlPattern ? `url ~ /${c.urlPattern}/` : undefined,
     c.visibleText ? `text "${c.visibleText}"` : undefined,
-    c.elementPresent ? `element "${c.elementPresent.primary.name}"` : undefined,
+    c.elementPresent
+      ? `element ${describeLocator(c.elementPresent.primary)}`
+      : undefined,
   ]
     .filter(Boolean)
     .join(" AND ")

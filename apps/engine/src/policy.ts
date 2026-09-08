@@ -46,8 +46,8 @@ export type Policy = z.infer<typeof PolicySchema>
 export const defaultPolicy = (): Policy =>
   PolicySchema.parse({
     allowedUrlPatterns: [
-      "^https?://localhost:\d+/",
-      "^https?://127\.0\.0\.1:\d+/",
+      "^https?://localhost(:\\d+)?(/|$)",
+      "^https?://127\\.0\\.0\\.1(:\\d+)?(/|$)",
     ],
     allowedActions: [
       "navigate",

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fixture Member Lookup</title>
+</head>
+<body>
+  <header><h1>Fixture Credit Union — Member Lookup</h1></header>
+  <main id="app">
+    <section id="search-view">
+      <h2>Find a member</h2>
+      <form id="search-form">
+        <label for="member-id">Member ID</label>
+        <input id="member-id" name="memberId" type="text" size="20" autocomplete="off">
+        <button type="submit">Search</button>
+      </form>
+      <p id="hint">Try a 6-digit member ID.</p>
+    </section>
+  </main>
+<script>
+const MEMBERS = {
+  "100231": { name: "Margaret Ellison", savings: "$12,480.55", checking: "$1,204.10" },
+  "100774": { name: "Deshawn Carter", savings: "$5,900.00", checking: "$843.22" }
+};
+document.getElementById("search-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const id = document.getElementById("member-id").value.trim();
+  const app = document.getElementById("app");
+  const m = MEMBERS[id];
+  if (m) {
+    history.pushState({}, "", "/member/" + id);
+    app.innerHTML =
+      '<section id="detail-view"><h2>Member detail</h2>' +
+      '<table border="1"><tr><th>Name</th><td id="member-name">' + m.name + '</td></tr>' +
+      '<tr><th>Member ID</th><td>' + id + '</td></tr>' +
+      '<tr><th>Savings balance</th><td id="savings-balance">' + m.savings + '</td></tr>' +
+      '<tr><th>Checking balance</th><td id="checking-balance">' + m.checking + '</td></tr>' +
+      '</table><a href="/">Back to search</a></section>';
+    document.title = "Member " + id;
+  } else {
+    history.pushState({}, "", "/search/not-found");
+    app.innerHTML =
+      '<section id="not-found-view"><h2>No results</h2>' +
+      '<p id="not-found-message">No member found with ID ' + id + '.</p>' +
+      '<a href="/">Back to search</a></section>';
+    document.title = "No results";
+  }
+});
+</script>
+</body>
+</html>

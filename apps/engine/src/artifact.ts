@@ -61,40 +61,43 @@ export const CapabilityOutputSchema = z.object({
 export type CapabilityOutput = z.infer<typeof CapabilityOutputSchema>
 
 /**
+ * One locator candidate for an element, with the strategy that produced it.
+ * `a11y` (role + accessible name) is the preferred strategy — it survives
+ * CSS restyling, theming, and markup churn, which is exactly the drift we
+ * expect across tenants that share a vendor product.
+ */
+export const LocatorSchema = z.object({
+  strategy: z.enum(["a11y", "css", "text"]),
+  role: z.string().optional().describe("ARIA role, for strategy a11y"),
+  name: z
+    .string()
+    .optional()
+    .describe("Accessible name as observed by the discovery run, for a11y"),
+  exact: z
+    .boolean()
+    .default(true)
+    .describe("Match the accessible name exactly (case-sensitive)"),
+  css: z.string().optional().describe("CSS selector, for strategy css"),
+  text: z
+    .string()
+    .optional()
+    .describe("Visible text to match, for strategy text"),
+})
+export type Locator = z.infer<typeof LocatorSchema>
+
+/**
  * How one element is found on the live surface.
  *
- * `primary` is the accessibility-tree identity of the element (its ARIA role
- * plus accessible name, plus `exact` matching control). This is what replay
- * resolves first — it survives CSS restyling, theming, and markup churn,
- * which is exactly the drift we expect across tenants.
- *
- * `fallbacks` records every OTHER locator the discovery run observed for the
- * same element, tried in order: a CSS path and/or a visible-text match. They
- * exist so replay degrades gracefully when the a11y tree changes, and so a
- * reviewer can see the full identification evidence.
- *
- * `robustness` is a human-readable note (written by the discovery model at
- * distillation time) explaining WHY this target should (or should not)
- * survive UI drift — e.g. "role+name is stable; css path contains volatile
- * utility classes".
+ * `primary` is the locator replay tries first — almost always the
+ * accessibility-tree identity of the element. `fallbacks` records every
+ * OTHER locator the discovery run observed for the same element, tried in
+ * recorded order. `robustness` is a human-readable note (written by the
+ * discovery model at distillation time) explaining WHY this target should
+ * (or should not) survive UI drift.
  */
 export const TargetSchema = z.object({
-  primary: z.object({
-    role: z.string().describe("ARIA role, e.g. textbox, button, link"),
-    name: z
-      .string()
-      .describe("Accessible name as observed by the discovery run"),
-    exact: z
-      .boolean()
-      .default(true)
-      .describe("Match the accessible name exactly (case-sensitive)"),
-  }),
-  fallbacks: z
-    .object({
-      css: z.string().optional(),
-      text: z.string().optional(),
-    })
-    .optional(),
+  primary: LocatorSchema,
+  fallbacks: z.array(LocatorSchema).default([]),
   robustness: z
     .string()
     .describe("Why this target should survive UI drift (reviewer-facing)"),

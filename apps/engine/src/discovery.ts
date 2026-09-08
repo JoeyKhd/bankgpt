@@ -142,13 +142,25 @@ const DistilledArtifactSchema = z.object({
       target: z
         .object({
           primary: z.object({
-            role: z.string(),
-            name: z.string(),
+            strategy: z.enum(["a11y", "css", "text"]),
+            role: z.string().optional(),
+            name: z.string().optional(),
             exact: z.boolean().default(true),
+            css: z.string().optional(),
+            text: z.string().optional(),
           }),
           fallbacks: z
-            .object({ css: z.string().optional(), text: z.string().optional() })
-            .optional(),
+            .array(
+              z.object({
+                strategy: z.enum(["a11y", "css", "text"]),
+                role: z.string().optional(),
+                name: z.string().optional(),
+                exact: z.boolean().default(true),
+                css: z.string().optional(),
+                text: z.string().optional(),
+              })
+            )
+            .default([]),
           robustness: z.string(),
         })
         .optional(),
@@ -361,7 +373,11 @@ export const runDiscovery = async (
             type: "text",
             text: `GOAL: ${options.goal}\n\nCurrent URL: ${observation.url}\n\nACCESSIBILITY TREE:\n${observation.aria}\n\nChoose the next action.`,
           },
-          { type: "image", image: observation.screenshot },
+          {
+            type: "file",
+            data: observation.screenshot,
+            mediaType: "image/png",
+          },
         ],
       }
       transcript.push(userContent)
@@ -398,7 +414,11 @@ export const runDiscovery = async (
 
       let outcomeNote = ""
       try {
-        assertActionAllowed(policy, decision.action)
+        // "done"/"stuck" are loop-control signals, not page actions — the
+        // action allowlist only governs real UI interactions.
+        if (decision.action !== "done" && decision.action !== "stuck") {
+          assertActionAllowed(policy, decision.action)
+        }
         outcomeNote = await act(page, decision)
       } catch (err) {
         outcomeNote = `ACTION FAILED: ${err instanceof Error ? err.message : String(err)}`

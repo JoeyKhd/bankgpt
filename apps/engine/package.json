@@ -9,8 +9,8 @@
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,js}\"",
     "typecheck": "tsc --noEmit",
-    "discover": "node --env-file=.env.local --import tsx src/cli.ts discover",
-    "replay": "node --env-file=.env.local --import tsx src/cli.ts replay"
+    "discover": "node --env-file-if-exists=.env.local --import tsx src/cli.ts discover",
+    "replay": "node --env-file-if-exists=.env.local --import tsx src/cli.ts replay"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
