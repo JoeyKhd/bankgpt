@@ -7,7 +7,7 @@ reasons. This is a decision ledger, not a raw transcript or a stream of private
 reasoning. Record outcomes, relevant constraints, trade-offs, and evidence that
 someone reviewing the project can verify.
 
-The [assignment](context/assignment.md) asks us to explain and defend our choices
+The [assignment](assignment.md) asks us to explain and defend our choices
 and cuts in `/REPORT.md`. It does **not** explicitly require a separate ledger.
 This file is a project convention requested by the project owner. It supports,
 but does not replace, the report or the runtime evidence in `/evidence/`.
@@ -173,3 +173,18 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   definition-of-done sections updated to match.
 - **References:** Project owner's monorepo request; `package.json`;
   `pnpm-workspace.yaml`; D-006.
+
+### D-008 — 2026-09-08T20:01:12Z — Move the decision ledger into `context/`
+
+- **Status:** accepted
+- **Decision/change:** Moved `thought-process.md` from the repository root to
+  `context/thought-process.md` (recorded by git as a rename) and updated all
+  links and references in `AGENTS.md`, `context/what-we-are-building.md`, and
+  this file.
+- **Why:** The project owner prefers keeping all project knowledge together in
+  `context/`; the ledger belongs with the product brief and source material.
+- **Consequences/follow-up:** This supersedes the location recorded in D-003.
+  Future references use `context/thought-process.md`. Historical entries
+  mentioning the old root path are preserved as the record of what was true
+  at the time.
+- **References:** Project owner's request; D-003; `context/thought-process.md`.

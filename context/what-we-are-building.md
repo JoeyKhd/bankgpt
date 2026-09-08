@@ -19,7 +19,7 @@ Sources:
 
 This is a summary, not a replacement for the assignment. If they differ, consult
 the assignment and record any agreed clarification in
-[the decision ledger](../thought-process.md).
+[the decision ledger](thought-process.md).
 
 ## The product in one sentence
 
@@ -202,7 +202,7 @@ Use the assignment's exact paths and report headings:
 5. **Submission email** to `assignments@interface.ai`, sent from the address used
    to apply, with the public repository URL on its own line. Do not send a zip.
 
-The local [decision ledger](../thought-process.md) supports the eventual write-up.
+The local [decision ledger](thought-process.md) supports the eventual write-up.
 It is our project convention, not an additional deliverable specified by the
 assignment, and it does not replace `/REPORT.md` or runtime evidence.
 
@@ -231,6 +231,6 @@ policy, operator interface, or evidence tooling. The extension and tenant-reuse
 designs are also unresolved.
 
 The project owner will explain the implementation approach later. Record agreed
-decisions and concise reasons in [thought-process.md](../thought-process.md) as they
+decisions and concise reasons in [thought-process.md](thought-process.md) as they
 are made. Do not treat requirements or illustrative examples as implementation
 choices.

@@ -7,7 +7,7 @@ here first.
 
 **Always save conventions we teach you.** When the user corrects you, teaches a
 preference, or establishes a convention, update this file in the same change and
-record it in [thought-process.md](thought-process.md). Do not wait to be asked
+record it in [context/thought-process.md](context/thought-process.md). Do not wait to be asked
 twice. Conventions live in the repository, not only in agent memory.
 
 ## Read before working
@@ -15,7 +15,7 @@ twice. Conventions live in the repository, not only in agent memory.
 1. Read [context/what-we-are-building.md](context/what-we-are-building.md) for
    the product purpose, required behavior, scope, completion bar, and
    deliverables.
-2. Read [thought-process.md](thought-process.md) for the decision history and
+2. Read [context/thought-process.md](context/thought-process.md) for the decision history and
    unresolved choices. Check for later entries that supersede earlier decisions.
 3. Consult [context/assignment.md](context/assignment.md) for authoritative
    assignment requirements and [context/email.md](context/email.md) for the
@@ -40,7 +40,7 @@ twice. Conventions live in the repository, not only in agent memory.
 
 ## Maintain the decision ledger
 
-- Append a timestamped entry to [thought-process.md](thought-process.md) for
+- Append a timestamped entry to [context/thought-process.md](context/thought-process.md) for
   each meaningful decision, fix, or change. Include the ledger update in the
   related commit where practical.
 - Follow the ledger template: stable ID, actual UTC timestamp in ISO 8601
@@ -140,7 +140,7 @@ stop and report).
   (production build succeeds). These fan out via `pnpm -r --if-present`;
   running them inside `apps/frontend` is equivalent. There is no test script
   yet; when one is added, it joins this list.
-- **`context/`, `thought-process.md`, and `AGENTS.md`:** no checks beyond
+- **`context/` and `AGENTS.md`:** no checks beyond
   Markdown link/structure sanity and a clean staged diff.
 - If a check cannot pass yet (blocked, half-done, waiting on the user), **say
   so and stop** — do not commit or push a red state to `main`. Never weaken
@@ -213,7 +213,7 @@ Do not recover by rewriting history unless the user asks.
 - Keep assignment sources and project decisions separate:
   [assignment](context/assignment.md) and [email](context/email.md) are source
   material, [the product brief](context/what-we-are-building.md) summarizes the
-  required product and scope, and [the ledger](thought-process.md) records
+  required product and scope, and [the ledger](context/thought-process.md) records
   decisions.
 - Do not create raw data dumps. Extract useful facts into Markdown instead.
 - Do not introduce an architecture, brand, layout, or package-manager
