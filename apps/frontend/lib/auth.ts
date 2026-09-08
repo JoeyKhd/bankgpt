@@ -1,14 +1,11 @@
-import path from "node:path"
 import { betterAuth } from "better-auth"
 import { admin as adminPlugin } from "better-auth/plugins/admin"
 import { adminAc, defaultStatements } from "better-auth/plugins/admin/access"
 import { createAccessControl } from "better-auth/plugins/access"
-import Database from "better-sqlite3"
 
-// SQLite lives under gitignored `data/`; the app owns this file (auth + app data).
-const database = new Database(
-  process.env.DATABASE_URL ?? path.join(process.cwd(), "data", "app.sqlite")
-)
+import { db } from "@/lib/db"
+
+const database = db
 
 // Our two roles are named "admin" and "operator" (D-022), so the admin
 // plugin uses a custom access controller instead of its default "user" role.
