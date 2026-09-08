@@ -135,6 +135,29 @@ for frontend work.
 EVM/wallet conventions from the owner's other projects are **not** relevant
 here.
 
+### Database and authentication (apps/frontend)
+
+- **Auth: `better-auth`** (email + password enabled) backed by **SQLite via
+  `better-sqlite3`** (v12 — better-auth 1.7 pins that peer range).
+- Server config: `lib/auth.ts` (a `better-sqlite3` instance passed as
+  `database`); route handler: `app/api/auth/[...all]/route.ts`
+  (`toNextJsHandler`); browser client: `lib/auth-client.ts`
+  (`createAuthClient` from `better-auth/react`). Server-side session reads use
+  `auth.api.getSession({ headers: await headers() })`.
+- **SQLite is the app database for everything for now**, not just auth. The
+  file lives at `apps/frontend/data/app.sqlite` (override with `DATABASE_URL`)
+  and **must stay gitignored** — `data/.gitignore` ignores all contents, and
+  `.gitignore` also ignores `/data/*.sqlite` + journal/wal/shm sidecars.
+  Commit only the schema and `.env.example`, never the database file.
+- Env vars: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, optional `DATABASE_URL` —
+  names only in `apps/frontend/.env.example`.
+- After changing auth config or plugins, re-run the schema migration from
+  `apps/frontend`: `pnpm dlx @better-auth/cli@latest migrate --config
+  lib/auth.ts`.
+- `better-sqlite3` builds a native binding; its build script is allowlisted in
+  the root `pnpm-workspace.yaml` (`allowBuilds`), so a plain `pnpm install`
+  compiles it.
+
 ## Package manager
 
 - **pnpm only.** Never npm or yarn. Pinned via `packageManager` in the root
@@ -166,8 +189,9 @@ stop and report).
 - **`apps/frontend`:** from the repo root, `pnpm run lint` (zero errors
   **and** zero warnings), `pnpm run typecheck` (zero errors), `pnpm run build`
   (production build succeeds). These fan out via `pnpm -r --if-present`;
-  running them inside `apps/frontend` is equivalent. There is no test script
-  yet; when one is added, it joins this list.
+  running them inside `apps/frontend` is equivalent. Run `pnpm format` before
+  linting so Prettier-clean files stay clean. There is no test script yet;
+  when one is added, it joins this list.
 - **`context/` and `AGENTS.md`:** no checks beyond
   Markdown link/structure sanity and a clean staged diff.
 - If a check cannot pass yet (blocked, half-done, waiting on the user), **say

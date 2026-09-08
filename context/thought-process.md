@@ -209,3 +209,25 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `lint`, and `build` all pass with the new dependencies.
 - **References:** Project owner's correction; `apps/frontend/package.json`;
   npm registry metadata; D-006.
+
+### D-010 — 2026-09-08T20:44:40Z — Adopt better-auth with a gitignored SQLite database
+
+- **Status:** accepted
+- **Decision/change:** Added authentication with `better-auth` 1.7 on SQLite
+  (`better-sqlite3` v12, the peer range better-auth pins). Files:
+  `apps/frontend/lib/auth.ts` (email + password), `lib/auth-client.ts`,
+  `app/api/auth/[...all]/route.ts`, `.env.example` (names only), and
+  `data/.gitignore`. The SQLite file is `apps/frontend/data/app.sqlite`
+  (override `DATABASE_URL`) and is gitignored via `data/.gitignore` plus
+  `/data/*.sqlite*` rules in `apps/frontend/.gitignore`. SQLite is the app
+  database for all data for now, not just auth.
+- **Why:** The owner chose better-auth and SQLite for the whole app, and
+  required the database file to stay out of git.
+- **Consequences/follow-up:** Verified end-to-end: schema migration created
+  the four auth tables; dev-server smoke test signed up a user, validated the
+  session cookie, and signed in; smoke data removed afterward. `git
+  check-ignore` confirms every `data/*.sqlite*` variant is ignored. All
+  format/lint/typecheck/build checks pass. The CLI's migrate prompt needs a
+  `y` confirmation when run manually.
+- **References:** Project owner's request; better-auth docs (basic-usage,
+  adapters/sqlite, integrations/next); `apps/frontend/.gitignore`; D-009.

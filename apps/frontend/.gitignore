@@ -35,3 +35,9 @@ pnpm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local data
+/data/*.sqlite
+/data/*.sqlite-journal
+/data/*.sqlite-wal
+/data/*.sqlite-shm
