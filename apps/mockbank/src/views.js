@@ -331,3 +331,43 @@ export const confirmationPage = (member, account, confirmationNumber) =>
        <p><a href="/members/${esc(member.id)}">Back to member</a> &nbsp;|&nbsp; <a href="/dashboard">Dashboard</a></p>
      </td></tr></table>`,
   )
+
+
+export const freezePage = (member, card) => {
+  const reasons = [
+    ["lost", "Lost"],
+    ["stolen", "Stolen"],
+    ["fraud-suspected", "Fraud suspected"],
+    ["member-request", "Member request"],
+  ]
+  const options = reasons
+    .map(([value, label]) => `<option value="${value}">${label}</option>`)
+    .join("")
+  return layout(
+    "Freeze card",
+    `<h1>Freeze debit card</h1>
+     <table class="tbl"><tr class="row"><td class="cell">
+       <p>Member: <b>${esc(member.name)}</b> (${esc(member.id)})</p>
+       <p>Freezing blocks new purchases and ATM withdrawals immediately. Tell the member to visit a branch for a replacement.</p>
+       <table class="tbl" border="1" cellpadding="6">
+         <tr class="row"><th class="cell">Card</th><td class="cell">&#8226;&#8226;&#8226;&#8226; ${esc(card.last4)}</td></tr>
+         <tr class="row"><th class="cell">Network</th><td class="cell">${esc(card.network)}</td></tr>
+         <tr class="row"><th class="cell">Current status</th><td class="cell">${esc(card.status)}</td></tr>
+       </table>
+       <br>
+       <form method="post" action="/members/${esc(member.id)}/cards/${esc(card.last4)}/freeze">
+         <table class="tbl" border="1" cellpadding="8">
+           <tr class="row">
+             <td class="cell"><label>Reason
+               <select name="reason">${options}</select>
+             </label></td>
+           </tr>
+           <tr class="row">
+             <td class="cell"><button type="submit">Freeze card</button></td>
+           </tr>
+         </table>
+       </form>
+       <p><a href="/members/${esc(member.id)}">Cancel</a></p>
+     </td></tr></table>`,
+  )
+}

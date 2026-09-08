@@ -276,6 +276,67 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
+  // --- Freeze card flow ------------------------------------------------------
+
+  const FREEZE_REASONS = new Set(["lost", "stolen", "fraud-suspected", "member-request"])
+
+  const freezeMatch = path.match(/^\/members\/(\d+)\/cards\/(\d{4})\/freeze$/)
+  if (freezeMatch) {
+    const member = store.findMember(freezeMatch[1])
+    if (!member) {
+      sendHtml(res, 404, memberNotFound(freezeMatch[1]))
+      return
+    }
+    const card = store.findCard(member, freezeMatch[2])
+    if (!card) {
+      sendHtml(
+        res,
+        404,
+        views.messagePage(
+          "Card not found",
+          "Card not found",
+          `This member has no card ending in <b>${views.esc(freezeMatch[2])}</b>.`,
+        ),
+      )
+      return
+    }
+    if (card.status === "Frozen") {
+      // Business outcome, not an error: the console says so with HTTP 200.
+      sendHtml(
+        res,
+        200,
+        views.messagePage(
+          "Card is already frozen",
+          "Card is already frozen",
+          `Card &#8226;&#8226;&#8226;&#8226; ${views.esc(card.last4)} for ${views.esc(
+            member.name,
+          )} is already frozen (reason: ${views.esc(card.frozenReason)}). No changes were made.`,
+        ),
+      )
+      return
+    }
+    if (req.method === "GET") {
+      sendHtml(res, 200, views.freezePage(member, card))
+      return
+    }
+    if (req.method === "POST") {
+      const body = await readBody(req)
+      const reason = (body.get("reason") || "").trim()
+      if (!FREEZE_REASONS.has(reason)) {
+        sendHtml(res, 200, views.freezePage(member, card))
+        return
+      }
+      store.freezeCard(card, reason)
+      redirect(
+        res,
+        `/members/${member.id}?notice=${encodeURIComponent(
+          `Card .... ${card.last4} is now Frozen (${reason}).`,
+        )}`,
+      )
+      return
+    }
+  }
+
   const confirmationMatch = path.match(
     /^\/members\/(\d+)\/accounts\/(\d+)\/confirmation$/,
   )
