@@ -884,3 +884,20 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `playwright` devDependency stays for ad-hoc screenshots only (D-026), not
   for test suites.
 - **References:** `AGENTS.md` (Definition of done); D-031, D-026.
+
+## D-039 — 2026-09-08T23:32:49Z — Sidebar brand blocks show the BankGPT logo lockup only
+
+- **Status:** accepted
+- **Decision/change:** The top-left brand block in the `/chat` sidebar now
+  shows the `bankgpt-mark.svg` logo with a single "BankGPT" wordmark —
+  the "Caller" suffix and the "Capability invocation only" subtitle are
+  gone. The `/admin` console sidebar likewise drops its "Admin console"
+  eyebrow, keeping logo + "BankGPT".
+- **Why:** Owner direction — the top left on both surfaces should be just
+  BankGPT with the logo, not the surrounding labels.
+- **Consequences/follow-up:** The `/chat` main-panel header and welcome
+  screen still carry "Caller simulation" eyebrows; the owner was told and
+  left them in place. Page metadata (e.g. `title: "Caller Chat"`) is
+  unchanged.
+- **References:** `apps/frontend/app/(app)/chat/chat-client.tsx`,
+  `apps/frontend/app/(app)/admin/admin-shell.tsx`.

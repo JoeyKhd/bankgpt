@@ -95,16 +95,11 @@ export const AdminShell = ({ children }: { children: React.ReactNode }) => {
           <Image
             src="/bankgpt-mark.svg"
             alt="BankGPT"
-            width={26}
-            height={26}
+            width={45}
+            height={27}
             className="shrink-0"
           />
-          <div className="flex flex-col">
-            <span className="text-sm leading-tight font-semibold">BankGPT</span>
-            <span className="font-mono text-xs tracking-[0.14em] text-emerald-300/80 uppercase">
-              Admin console
-            </span>
-          </div>
+          <span className="text-sm leading-tight font-semibold">BankGPT</span>
         </div>
 
         <nav className="flex flex-1 flex-col gap-5 px-3 py-4">

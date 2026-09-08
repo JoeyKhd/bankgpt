@@ -182,14 +182,7 @@ export const ChatClient = () => {
               height={24}
               className="shrink-0"
             />
-            <div className="flex min-w-0 flex-col">
-              <span className="truncate text-sm font-semibold">
-                BankGPT Caller
-              </span>
-              <span className="truncate text-xs text-muted-foreground">
-                Capability invocation only
-              </span>
-            </div>
+            <span className="truncate text-sm font-semibold">BankGPT</span>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             <ThreadList />
