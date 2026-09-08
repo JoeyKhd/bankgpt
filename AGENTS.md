@@ -102,10 +102,38 @@ code, and heed deprecation notices. The `next-best-practices`,
 `vercel-composition-patterns`, and `web-design-guidelines` skills are relevant
 for frontend work.
 
-Not installed yet — the owner's defaults when the need arises (confirm before
-introducing): `@tanstack/query` for server state, `@tanstack/form` for forms,
-`@tanstack/markdown` for markdown, `zod` for boundary validation. EVM/wallet
-conventions from the owner's other projects are **not** relevant here.
+#### TanStack libraries and validation (apps/frontend)
+
+- **Charts: `@tanstack/charts`.** Use the compact linear scale from
+  `@tanstack/charts/scales/linear` so domains are inferred, the tooltip
+  behavior from `@tanstack/charts/tooltip`, and render through the React
+  adapter with a useful `ariaLabel`. Preserve the original data rows for
+  typed tooltip and focus callbacks; size scatter points with an explicit
+  square-root radius scale.
+- **Server state: `@tanstack/react-query` (always).** Domain-shaped query
+  keys, colocated query functions, optimistic mutations where useful,
+  targeted invalidation after writes. Cover loading, error, empty,
+  background-refetch, and stale-data states. Keep server data out of global
+  client state.
+- **Forms: `@tanstack/react-form` (always).** Typed form and field APIs,
+  synchronous and debounced async validators, deeply nested object and array
+  fields, granular subscriptions so only relevant UI updates. Keep it
+  headless and render accessible, product-specific controls.
+- **Markdown: `@tanstack/markdown` (always).** Treat its serializable AST as
+  the durable document model and render from that tree. Enable only the
+  syntax extensions the product needs. Preserve the safe defaults and
+  deterministic output; keep syntax highlighting as an explicit external
+  integration. For accumulated AI responses, use the streaming profile
+  without carrying incremental parser state between updates.
+- **Validation: `zod` (always).** Use zod (v4) for all validation — form
+  schemas (with `@tanstack/react-form` validators), env-var parsing, API /
+  route input, and any external data at a boundary. One schema is the single
+  source of truth; derive types with `z.infer<typeof schema>` instead of
+  hand-writing matching interfaces. Never write inline regex/manual
+  validators in components when a zod schema can express them.
+
+EVM/wallet conventions from the owner's other projects are **not** relevant
+here.
 
 ## Package manager
 

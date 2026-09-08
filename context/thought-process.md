@@ -188,3 +188,24 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   mentioning the old root path are preserved as the record of what was true
   at the time.
 - **References:** Project owner's request; D-003; `context/thought-process.md`.
+
+### D-009 — 2026-09-08T20:40:59Z — Install and codify the TanStack + zod stack
+
+- **Status:** accepted
+- **Decision/change:** Installed the owner's standard frontend libraries into
+  `apps/frontend`: `@tanstack/charts` 0.16, `@tanstack/react-query` 5.102,
+  `@tanstack/react-form` 1.33, `@tanstack/markdown` 0.0.13, and `zod` 4.5.
+  `AGENTS.md` now lists them as installed with the owner's usage conventions
+  (charts scales/tooltip, query keys and invalidation, headless form, AST
+  markdown, zod-everywhere validation), replacing the earlier
+  "not installed yet" hedge.
+- **Why:** The owner corrected the earlier deferral (D-006): these libraries
+  are established conventions and belong installed, not described as pending.
+  `AGENTS.md` should state what is true, verified against `package.json`.
+- **Consequences/follow-up:** The convention text originally referenced a
+  `@tanstack/react-markdown` package, which does not exist in the npm
+  registry; the real renderer is `@tanstack/markdown`, so that is what is
+  installed and documented. Verified: root fanned-out `pnpm typecheck`,
+  `lint`, and `build` all pass with the new dependencies.
+- **References:** Project owner's correction; `apps/frontend/package.json`;
+  npm registry metadata; D-006.
