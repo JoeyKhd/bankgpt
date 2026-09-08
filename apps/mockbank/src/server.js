@@ -16,6 +16,41 @@ const store = createStore()
 // session token -> { username, lastActivity, getCount }
 const sessions = new Map()
 
+const ACCOUNT_TYPES = new Set(["savings", "checking", "money-market"])
+
+const readAccountValues = (body) => ({
+  accountType: (body.get("accountType") || "").trim(),
+  initialDeposit: (body.get("initialDeposit") || "").trim(),
+  nickname: (body.get("nickname") || "").trim(),
+})
+
+// Server-side validation for the open sub-account flow. Invalid input never
+// creates an account; the form or review step re-renders with an error.
+const validateAccountInput = (values) => {
+  if (!ACCOUNT_TYPES.has(values.accountType)) {
+    return {
+      ok: false,
+      error: "Choose a valid account type: savings, checking, or money-market.",
+    }
+  }
+  const normalized = values.initialDeposit.replace(/,/g, "")
+  const amount = Number(normalized)
+  if (normalized === "" || !Number.isFinite(amount)) {
+    return { ok: false, error: "Initial deposit must be a number (0 or more)." }
+  }
+  if (amount < 0) {
+    return { ok: false, error: "Initial deposit cannot be negative. Enter 0 or more." }
+  }
+  return { ok: true, value: Math.round(amount * 100) / 100 }
+}
+
+const memberNotFound = (id) =>
+  views.messagePage(
+    "Member not found",
+    "Member not found",
+    `No member exists with ID <b>${views.esc(id)}</b>.`,
+  )
+
 const parseCookies = (req) => {
   const header = req.headers.cookie || ""
   const cookies = {}
@@ -160,6 +195,109 @@ const server = http.createServer(async (req, res) => {
       return
     }
     sendHtml(res, 200, views.memberPage(member, url.searchParams.get("notice") || ""))
+    return
+  }
+
+  // --- Open sub-account flow -------------------------------------------------
+
+  const newAccountMatch = path.match(/^\/members\/(\d+)\/accounts\/new$/)
+  if (newAccountMatch && req.method === "GET") {
+    const member = store.findMember(newAccountMatch[1])
+    if (!member) {
+      sendHtml(res, 404, memberNotFound(newAccountMatch[1]))
+      return
+    }
+    sendHtml(
+      res,
+      200,
+      views.accountFormPage(member, {
+        accountType: "savings",
+        initialDeposit: "",
+        nickname: "",
+      }),
+    )
+    return
+  }
+
+  const reviewMatch = path.match(/^\/members\/(\d+)\/accounts\/review$/)
+  if (reviewMatch && req.method === "POST") {
+    const member = store.findMember(reviewMatch[1])
+    if (!member) {
+      sendHtml(res, 404, memberNotFound(reviewMatch[1]))
+      return
+    }
+    const values = readAccountValues(await readBody(req))
+    const result = validateAccountInput(values)
+    if (!result.ok) {
+      // Validation-error path: the form re-renders with the entered values.
+      sendHtml(res, 200, views.accountFormPage(member, values, result.error))
+      return
+    }
+    sendHtml(res, 200, views.reviewPage(member, values, result.value))
+    return
+  }
+
+  const createMatch = path.match(/^\/members\/(\d+)\/accounts$/)
+  if (createMatch && req.method === "POST") {
+    const member = store.findMember(createMatch[1])
+    if (!member) {
+      sendHtml(res, 404, memberNotFound(createMatch[1]))
+      return
+    }
+    const body = await readBody(req)
+    const values = readAccountValues(body)
+    const result = validateAccountInput(values)
+    if (!result.ok) {
+      sendHtml(res, 200, views.accountFormPage(member, values, result.error))
+      return
+    }
+    if (body.get("acknowledge") !== "yes") {
+      sendHtml(
+        res,
+        200,
+        views.reviewPage(
+          member,
+          values,
+          result.value,
+          "You must check the confirmation box to open the sub-account.",
+        ),
+      )
+      return
+    }
+    const { account, confirmationNumber } = store.openAccount(member, {
+      accountType: values.accountType,
+      initialDeposit: result.value,
+      nickname: values.nickname,
+    })
+    redirect(
+      res,
+      `/members/${member.id}/accounts/${account.number}/confirmation?c=${confirmationNumber}`,
+    )
+    return
+  }
+
+  const confirmationMatch = path.match(
+    /^\/members\/(\d+)\/accounts\/(\d+)\/confirmation$/,
+  )
+  if (confirmationMatch && req.method === "GET") {
+    const member = store.findMember(confirmationMatch[1])
+    const account =
+      member &&
+      member.accounts.find((entry) => entry.number === confirmationMatch[2])
+    const confirmationNumber = (url.searchParams.get("c") || "").trim()
+    if (!member || !account || !/^CNF-\d+$/.test(confirmationNumber)) {
+      sendHtml(
+        res,
+        404,
+        views.messagePage(
+          "Confirmation not found",
+          "Confirmation not found",
+          "This confirmation page is not available. The account may not exist, or the state was reset.",
+        ),
+      )
+      return
+    }
+    sendHtml(res, 200, views.confirmationPage(member, account, confirmationNumber))
     return
   }
 

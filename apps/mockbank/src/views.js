@@ -227,3 +227,107 @@ export const messagePage = (title, heading, message) =>
 
 export const notFoundPage = () =>
   messagePage("Not found", "Page not found", "The requested page does not exist on this console.")
+
+
+const ACCOUNT_TYPES = ["savings", "checking", "money-market"]
+
+const typeOptions = (selected) =>
+  ACCOUNT_TYPES.map(
+    (type) =>
+      `<option value="${type}"${type === selected ? " selected" : ""}>${type}</option>`,
+  ).join("")
+
+export const accountFormPage = (member, values, error = "") =>
+  layout(
+    "Open sub-account",
+    `<h1>Open sub-account</h1>
+     <table class="tbl"><tr class="row"><td class="cell">
+       <p>Member: <b>${esc(member.name)}</b> (${esc(member.id)})</p>
+       ${error ? `<p class="err">${esc(error)}</p>` : ""}
+       <form method="post" action="/members/${esc(member.id)}/accounts/review">
+         <table class="tbl" border="1" cellpadding="8">
+           <tr class="row">
+             <td class="cell"><label>Account type
+               <select name="accountType">${typeOptions(values.accountType)}</select>
+             </label></td>
+           </tr>
+           <tr class="row">
+             <td class="cell"><label>Initial deposit (USD)
+               <input type="text" name="initialDeposit" size="12" value="${esc(values.initialDeposit)}">
+             </label></td>
+           </tr>
+           <tr class="row">
+             <td class="cell"><label>Nickname (optional)
+               <input type="text" name="nickname" size="24" maxlength="30" value="${esc(values.nickname)}">
+             </label></td>
+           </tr>
+           <tr class="row">
+             <td class="cell"><button type="submit">Continue</button></td>
+           </tr>
+         </table>
+       </form>
+       <p><a href="/members/${esc(member.id)}">Back to member</a></p>
+     </td></tr></table>`,
+  )
+
+export const reviewPage = (member, values, deposit, error = "") =>
+  layout(
+    "Review sub-account",
+    `<h1>Review new sub-account</h1>
+     <table class="tbl"><tr class="row"><td class="cell">
+       <p>Member: <b>${esc(member.name)}</b> (${esc(member.id)})</p>
+       <p>Review the details below. The sub-account is created immediately when you confirm.</p>
+       ${error ? `<p class="err">${esc(error)}</p>` : ""}
+       <table class="tbl" border="1" cellpadding="6">
+         <tr class="row"><th class="cell">Account type</th><td class="cell">${esc(values.accountType)}</td></tr>
+         <tr class="row"><th class="cell">Initial deposit</th><td class="cell">${money(deposit)}</td></tr>
+         <tr class="row"><th class="cell">Nickname</th><td class="cell">${esc(values.nickname || "-")}</td></tr>
+       </table>
+       <br>
+       <form method="post" action="/members/${esc(member.id)}/accounts">
+         <input type="hidden" name="accountType" value="${esc(values.accountType)}">
+         <input type="hidden" name="initialDeposit" value="${esc(values.initialDeposit)}">
+         <input type="hidden" name="nickname" value="${esc(values.nickname)}">
+         <table class="tbl" border="1" cellpadding="8">
+           <tr class="row">
+             <td class="cell"><label><input type="checkbox" name="acknowledge" value="yes">
+               I confirm these details are correct and authorize opening this sub-account.</label></td>
+           </tr>
+           <tr class="row">
+             <td class="cell"><button type="submit">Open sub-account</button></td>
+           </tr>
+         </table>
+       </form>
+       <p><a href="/members/${esc(member.id)}/accounts/new">Edit details</a></p>
+     </td></tr></table>
+     <script>
+     (function () {
+       var forms = document.querySelectorAll('form[action$="/accounts"]')
+       for (var i = 0; i < forms.length; i++) {
+         forms[i].addEventListener("submit", function (event) {
+           if (!window.confirm("Open this sub-account? The account is created immediately.")) {
+             event.preventDefault()
+           }
+         })
+       }
+     })()
+     </script>`,
+  )
+
+export const confirmationPage = (member, account, confirmationNumber) =>
+  layout(
+    "Sub-account opened",
+    `<h1>Sub-account opened</h1>
+     <table class="tbl"><tr class="row"><td class="cell">
+       <p class="msg">The sub-account was opened successfully.</p>
+       <table class="tbl" border="1" cellpadding="6">
+         <tr class="row"><th class="cell">Member</th><td class="cell">${esc(member.name)} (${esc(member.id)})</td></tr>
+         <tr class="row"><th class="cell">Account type</th><td class="cell">${esc(account.type)}</td></tr>
+         <tr class="row"><th class="cell">Account number</th><td class="cell">${esc(account.number)}</td></tr>
+         <tr class="row"><th class="cell">Nickname</th><td class="cell">${esc(account.nickname || "-")}</td></tr>
+         <tr class="row"><th class="cell">Balance</th><td class="cell">${money(account.balance)}</td></tr>
+         <tr class="row"><th class="cell">Confirmation number</th><td class="cell"><b>${esc(confirmationNumber)}</b></td></tr>
+       </table>
+       <p><a href="/members/${esc(member.id)}">Back to member</a> &nbsp;|&nbsp; <a href="/dashboard">Dashboard</a></p>
+     </td></tr></table>`,
+  )
