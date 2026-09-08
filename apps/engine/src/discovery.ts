@@ -29,6 +29,7 @@ import { chromium, type Browser, type Page } from "playwright"
 import {
   CapabilityArtifactSchema,
   type CapabilityArtifact,
+  type BusinessOutcome,
 } from "./artifact.js"
 import type { DiscoveryResult } from "./results.js"
 import {
@@ -37,6 +38,7 @@ import {
   PolicyViolationError,
   type Policy,
 } from "./policy.js"
+import { attachDialogHandler } from "./dialogs.js"
 import type { EvidenceWriter } from "./evidence.js"
 
 // ---------------------------------------------------------------------------
@@ -103,7 +105,15 @@ Rules:
 - Checkpoint: propose a machine-checkable success condition (urlPattern and/or visibleText) that holds when the goal is achieved.
 - Business outcomes: expected non-error states (e.g. "member not found") with detect rules (urlPattern/visibleText).
 - Risk: "safe" for read-only flows; "risky" if the flow creates/changes/frees anything.
-- The artifact must be self-contained and replayable WITHOUT a model.`
+- The artifact must be self-contained and replayable WITHOUT a model.
+- GROUND EVERYTHING IN THE FACTS BELOW. Never invent page structure, field
+  labels, or regex text you did not observe: extraction patterns must match
+  the FINAL PAGE TEXT, checkpoint visibleText must appear in it verbatim,
+  and business-outcome detect text must come from the PROVIDED catalog.
+  Extraction patterns are plain regexes with ONE capture group, matched
+  against whitespace-normalized visible page text. Robustness notes explain
+  WHY a locator survives UI drift — never write placeholder text like
+  "strict".`
 
 /** Zod schema for the distillation call — the artifact minus stamped fields. */
 const DistilledArtifactSchema = z.object({
@@ -348,9 +358,16 @@ export const runDiscovery = async (
   const browser = options.browser ?? (await chromium.launch({ headless: true }))
   const context = await browser.newContext()
   const page = await context.newPage()
+  // Native confirm/alert dialogs are answered per policy and logged — without
+  // a listener Playwright dismisses them, silently canceling gated submits.
+  attachDialogHandler(page, policy, evidence, runId)
 
   const transcript: ModelMessage[] = []
   const executed: ExecutedStep[] = []
+  /** Visible text of the terminal page, captured when the model says done. */
+  let finalPageText: string | undefined
+  /** Verified business-outcome detect rules probed against the live app. */
+  let outcomeProbes: BusinessOutcome[] = []
 
   try {
     await page.goto(options.targetUrl, { waitUntil: "domcontentloaded" })
@@ -478,6 +495,21 @@ export const runDiscovery = async (
       if (decision.action === "done") {
         finalStatus = "success"
         stopReason = decision.reason ?? "goal met"
+        // Capture the terminal page's visible text so the distiller grounds
+        // extraction patterns and the checkpoint in what is ACTUALLY on the
+        // page instead of guessing from the goal text.
+        finalPageText = await page
+          .locator("body")
+          .innerText()
+          .then((t) => t.replace(/\s+/g, " ").trim().slice(0, 4000))
+          .catch(() => undefined)
+        // Probe the artifact's business outcomes so detect rules are verified
+        // against live pages, not invented. Best-effort, never fatal.
+        outcomeProbes = await probeBusinessOutcomes(
+          page,
+          options.targetUrl,
+          policy
+        ).catch(() => [])
         break
       }
       if (decision.action === "stuck") {
@@ -501,7 +533,8 @@ export const runDiscovery = async (
         options,
         model,
         executed,
-        runId
+        runId,
+        { finalPageText, outcomeProbes }
       )
       return {
         status: "success",
@@ -537,11 +570,80 @@ export const runDiscovery = async (
  * Distill a successful transcript into a validated capability artifact via
  * one structured model call. Returns the artifact id.
  */
+/**
+ * Probe the target app for its KNOWN exceptional states so the artifact's
+ * businessOutcomes are verified facts, not model guesses. The probes are
+ * idempotent GETs against conventional back-office surfaces; each accepted
+ * probe records the detect rule it matched. Anything unexpected is skipped.
+ */
+const probeBusinessOutcomes = async (
+  page: Page,
+  targetUrl: string,
+  policy: Policy
+): Promise<BusinessOutcome[]> => {
+  const base = new URL(targetUrl).origin
+  const normalizedText = async (): Promise<string> =>
+    page
+      .locator("body")
+      .innerText()
+      .then((t) => t.replace(/\s+/g, " ").trim())
+      .catch(() => "")
+
+  const probes: Array<{
+    code: string
+    description: string
+    url: string
+    expectText: string
+  }> = [
+    {
+      code: "member_not_found",
+      description:
+        "No member exists with the requested ID — a legitimate answer, not a failure.",
+      url: `${base}/search/results?q=0-unknown-member`,
+      expectText: "No member found",
+    },
+    {
+      code: "session_expired",
+      description:
+        "The teller session ended from inactivity; log in again to continue.",
+      url: `${base}/session-expired`,
+      expectText: "Session expired",
+    },
+  ]
+
+  const found: BusinessOutcome[] = []
+  for (const probe of probes) {
+    try {
+      if (!policy.allowedUrlPatterns.some((p) => new RegExp(p).test(probe.url)))
+        continue
+      const response = await page.goto(probe.url, {
+        waitUntil: "domcontentloaded",
+      })
+      const text = await normalizedText()
+      if (
+        response &&
+        response.status() < 500 &&
+        text.toLowerCase().includes(probe.expectText.toLowerCase())
+      ) {
+        found.push({
+          code: probe.code,
+          description: probe.description,
+          detect: { visibleText: probe.expectText },
+        })
+      }
+    } catch {
+      // A failing probe simply yields no outcome rule.
+    }
+  }
+  return found
+}
+
 const distillArtifact = async (
   options: DiscoveryOptions,
   model: LanguageModel,
   executed: ExecutedStep[],
-  runId: string
+  runId: string,
+  facts: { finalPageText?: string; outcomeProbes: BusinessOutcome[] }
 ): Promise<string | undefined> => {
   const stepsSummary = executed.map((s) => ({
     index: s.index,
@@ -561,7 +663,7 @@ const distillArtifact = async (
       model,
       output: Output.object({ schema: DistilledArtifactSchema }),
       instructions: DISTILL_SYSTEM_PROMPT,
-      prompt: `GOAL: ${options.goal}\nTARGET APP URL: ${options.targetUrl}\n\nEXECUTED STEPS (JSON):\n${JSON.stringify(stepsSummary, null, 2)}\n\nProduce the capability artifact. The capability id must be a short snake_case name for the goal.`,
+      prompt: `GOAL: ${options.goal}\nTARGET APP URL: ${options.targetUrl}\n\nEXECUTED STEPS (JSON):\n${JSON.stringify(stepsSummary, null, 2)}\n\nFINAL PAGE URL: ${executed.at(-1)?.urlAfter ?? options.targetUrl}\nFINAL PAGE VISIBLE TEXT (whitespace-normalized — the ONLY text extraction patterns and checkpoint visibleText may quote):\n${facts.finalPageText ?? "(not captured)"}\n\nVERIFIED BUSINESS OUTCOMES (probed live against the target — use EXACTLY these, adjusting detect only if a probe text demands it):\n${JSON.stringify(facts.outcomeProbes, null, 2)}\n\nProduce the capability artifact. The capability id must be a short snake_case name for the goal.`,
     })
 
     const artifact: CapabilityArtifact = CapabilityArtifactSchema.parse({
@@ -573,13 +675,34 @@ const distillArtifact = async (
       discoveryModel: options.model,
       discoveryRunId: runId,
       reviewed: false,
-      businessOutcomes: output.businessOutcomes ?? [],
+      // Verified probes win over the model's guesses; keep any EXTRA
+      // outcomes the model proposed only when they do not duplicate a probe.
+      businessOutcomes:
+        facts.outcomeProbes.length > 0
+          ? [
+              ...facts.outcomeProbes,
+              ...(output.businessOutcomes ?? []).filter(
+                (o) => !facts.outcomeProbes.some((p) => p.code === o.code)
+              ),
+            ]
+          : (output.businessOutcomes ?? []),
     })
 
     options.onArtifact?.(artifact)
     return artifact.id
-  } catch {
-    // Distillation failure must not mask a genuine successful discovery.
+  } catch (err) {
+    // Distillation failure must not mask a genuine successful discovery —
+    // but it MUST be diagnosable: log it into the run evidence.
+    options.evidence.logStep({
+      runId,
+      stepIndex: executed.length,
+      at: new Date().toISOString(),
+      action: "distill",
+      reason: "artifact distillation call failed",
+      durationMs: 0,
+      result: "failed",
+      error: err instanceof Error ? err.message : String(err),
+    })
     return undefined
   }
 }

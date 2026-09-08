@@ -39,6 +39,21 @@ export const PolicySchema = z.object({
   maxDiscoverySteps: z.number().int().positive().default(24),
   /** Discovery wall-clock timeout. */
   discoveryTimeoutMs: z.number().int().positive().default(180_000),
+  /**
+   * How the engine answers browser-native dialogs (window.confirm / alert /
+   * prompt). Legacy back-office apps gate risky submits on a native confirm;
+   * "accept" lets the recorded flow proceed, "dismiss" cancels every dialog.
+   * Operator policy decision; applied in BOTH discovery and replay. Every
+   * handled dialog is logged to the run evidence.
+   */
+  dialogHandling: z.enum(["accept", "dismiss"]).default("accept"),
+  /**
+   * Transient-500 resilience (replay): after an action, if the app rendered
+   * its transient error page, reload the page and re-drive the step, up to
+   * this many times. Only GET-rendered pages are reloaded (idempotent); a
+   * POST that failed server-side is never blindly repeated.
+   */
+  transientErrorMaxReloads: z.number().int().nonnegative().default(3),
 })
 export type Policy = z.infer<typeof PolicySchema>
 
@@ -71,6 +86,8 @@ export const defaultPolicy = (): Policy =>
     requireReviewForRisky: true,
     maxDiscoverySteps: 24,
     discoveryTimeoutMs: 180_000,
+    dialogHandling: "accept",
+    transientErrorMaxReloads: 3,
   })
 
 /** Thrown when the agent attempts to leave the allowlisted scope. */
