@@ -951,3 +951,78 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `apps/frontend/app/(app)/chat/chat-client.tsx`,
   `apps/frontend/components/assistant-ui/elements/thread.aui.tsx`,
   `@assistant-ui/core/dist/adapters/speech.js`.
+
+### D-039 — 2026-09-08T23:34:31Z — Computer-use stack: Playwright + accessibility-tree snapshots (proposal)
+
+- **Status:** proposed (owner confirmation requested; proceeding per the
+  goal's proceed-if-unanswered rule)
+- **Decision/change:** The engine's computer-use stack is **Playwright driving
+  Chromium**, observed through **accessibility-tree snapshots** (role, name,
+  state) plus screenshots for the model's situational awareness. Discovery
+  uses a vision-capable model via OpenRouter (D-013 stack: `ai` +
+  `@openrouter/ai-sdk-provider` in `apps/engine`). The saved capability
+  artifact binds each step to **a11y role/name locators** (Playwright
+  `getByRole`-style), with CSS/text fallbacks recorded for robustness —
+  never raw coordinates.
+- **Why:** DOM/a11y targeting is what makes replay deterministic and cheap;
+  pixel-coordinate CUA replay breaks on any layout shift. The assignment
+  explicitly blesses accessibility trees. Screenshots guide the LLM during
+  discovery, but the artifact replays against semantic locators, which
+  survive styling, branding, and minor drift — exactly the multi-tenant
+  property REPORT.md must argue. One model call per discovery step; zero
+  model calls on replay.
+- **Consequences/follow-up:** `playwright` becomes an `apps/engine`
+  dependency (already a frontend devDependency for screenshots, D-026).
+  The exact discovery model is chosen at implementation time from the
+  OpenRouter catalog (needs vision + tools); record it when pinned.
+- **References:** assignment §4 (computer-use technology is our call);
+  D-013, D-023.
+
+### D-040 — 2026-09-08T23:34:31Z — Proxy target: local mock bank "FinCore Teller" (proposal)
+
+- **Status:** proposed (owner confirmation requested; proceeding per the
+  goal's proceed-if-unanswered rule)
+- **Decision/change:** The proxy target is a **small local mock bank app we
+  build** at `apps/mockbank` (pnpm workspace member, zero runtime
+  dependencies — Node `http` + static HTML/vanilla JS, no framework). It
+  implements the workflows already named in the stub catalog
+  (`lib/capabilities-catalog.ts`): member search → member detail → balances;
+  open sub-account with a confirmation screen; freeze debit card. It
+  deliberately includes the hostile properties replay must survive:
+  table-based layouts, no test IDs, a real confirmation dialog, a session
+  timeout, and a "member not found" path.
+- **Why:** The brief's ground rules forbid real credentials/PII and risky
+  automation against third-party sites; a local target has zero
+  terms/rate-limit exposure, fully reproducible data for `/evidence/`, and
+  we control the write actions (opening an account) that no public banking
+  demo safely offers. We can also inject the exact exceptional states the
+  error taxonomy must handle.
+- **Consequences/follow-up:** `apps/mockbank` is demo infrastructure, not
+  the product; REPORT.md's Cuts section notes that real targets are legacy
+  third-party apps. The stub catalog's `targetApp: "FinCore Teller
+  (proxy)"` becomes literally true.
+- **References:** assignment §4 (target application is our call; local
+  sample app explicitly allowed); `apps/frontend/lib/capabilities-catalog.ts`.
+
+### D-041 — 2026-09-08T23:34:31Z — Frontend ↔ engine transport: HTTP + WebSocket control channel (proposal)
+
+- **Status:** proposed (owner confirmation requested; proceeding per the
+  goal's proceed-if-unanswered rule)
+- **Decision/change:** The engine exposes an **HTTP API** (runs, artifacts,
+  evidence, policy) plus a **WebSocket control channel** for live-session
+  traffic (step stream, pause/cede/resume, operator input during handoff).
+  The Next.js frontend calls the engine server-side (route handlers /
+  server components proxying with the engine URL from env). Engine state
+  (runs, artifacts, interventions) persists in the engine's own SQLite
+  database, separate from the auth DB.
+- **Why:** The assignment's handoff requires live, bidirectional
+  pause/cede/resume against the *same* running session — shared-SQLite
+  polling can't do that cleanly (D-023's open question). An explicit
+  control channel keeps ownership unambiguous and matches the "clean seam"
+  the assignment rewards.
+- **Consequences/follow-up:** New env var `ENGINE_URL` (name only) goes in
+  `apps/frontend/.env.example`; the engine gets its own port + env example.
+  Auth between frontend and engine is local-dev-simple (shared token) and
+  documented as a cut for production.
+- **References:** D-023 (transport was the open question); assignment §3.5
+  (escalation), §4 (architecture is our call).
