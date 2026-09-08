@@ -222,6 +222,38 @@ stop and report).
 - When a task might match an installed or installable skill, use the
   `find-skills` workflow and follow the matching skill before starting.
 
+## Skills
+
+Project skills live in `.agents/skills/` only (tracked in `skills-lock.json`,
+installed via `npx skills add <owner/repo@skill>`). The install CLI also
+symlinks them into `.claude/skills/` for Claude Code — that folder is
+gitignored; never commit it. **When you add or remove a skill, update this
+list in the same change** so every entry says what the skill is for. Use the
+relevant skill before starting a matching task:
+
+- `find-skills` (official Vercel) — discover and install more skills
+- `vercel-react-best-practices` (official Vercel) — React/Next.js performance
+  patterns
+- `web-design-guidelines` (official Vercel) — UI review and accessibility
+  audits
+- `frontend-design` (official Anthropic) — building distinctive, polished
+  frontend UI
+- `shadcn` (official shadcn) — adding/composing shadcn components
+- `better-auth-best-practices` (official Better Auth) — auth server/client
+  config, sessions, plugins
+- `tailwind-4-docs` — Tailwind CSS v4 docs snapshot (v4 is newer than
+  training data)
+- `tanstack-query` + `tanstack-form` — TanStack Query/Form patterns
+  (unofficial skills; AGENTS.md conventions win on conflict)
+- `zod` — schema validation best practices (unofficial; repo is zod v4 —
+  prefer repo conventions on API drift)
+- `pnpm` (antfu) — pnpm workspace/catalog/patch management
+- `extract-design-system` — extract design tokens from a public website; use
+  for the planned `DESIGN.md` from the interface.ai company site
+- `code-review`, `tdd`, `diagnosing-bugs`, `codebase-design`,
+  `domain-modeling`, `research`, `prototype` (mattpocock) — general
+  engineering workflow skills
+
 ## Commit and publish changes
 
 - Make a separate, focused commit for each fix or coherent change. Use a short

@@ -247,3 +247,34 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   check-ignore`) and was created in this change with a generated secret;
   `.env.example` remains the committed, value-free reference.
 - **References:** Project owner's request; `apps/frontend/.env.example`; D-010.
+
+### D-012 — 2026-09-08T20:57:10Z — Install project skills and document them in AGENTS.md
+
+- **Status:** accepted
+- **Decision/change:** Installed 18 project skills into `.agents/skills/`
+  (tracked in `skills-lock.json`) with `npx skills add`, chosen against the
+  skills.sh leaderboard and CLI search by stack fit, install count, and
+  source reputation: `vercel-react-best-practices` + `web-design-guidelines`
+  (official Vercel), `frontend-design` (official Anthropic), `shadcn`
+  (official shadcn), `better-auth-best-practices` (official Better Auth),
+  `tailwind-4-docs`, `tanstack-query` + `tanstack-form` + `zod` (unofficial;
+  AGENTS.md conventions win on conflict), `pnpm` (antfu),
+  `extract-design-system` (for the planned `DESIGN.md` extracted from the
+  interface.ai company site), and the mattpocock workflow skills
+  (`code-review`, `tdd`, `diagnosing-bugs`, `codebase-design`,
+  `domain-modeling`, `research`, `prototype`). Added a `## Skills` section to
+  `AGENTS.md` describing each skill's purpose, with the convention that
+  adding or removing a skill requires updating that list in the same change.
+  Gitignored `.claude/` (the CLI's Claude Code symlink dir).
+- **Why:** The project owner asked for stack-matched skills, an AGENTS.md
+  list describing what each is for, and a standing note that future skills
+  must be described when added. Next.js 16 and Tailwind 4 are newer than
+  model training data, so pinned docs/pattern skills reduce API drift.
+- **Consequences/follow-up:** Deliberately NOT installed yet (owner decides
+  the automation stack): browser-automation/computer-use tooling skills such
+  as `vercel-labs/agent-browser@agent-browser`,
+  `microsoft/playwright-cli@playwright-cli`, or `stablyai/orca@computer-use`.
+  Revisit once the implementation approach is chosen. `DESIGN.md` extraction
+  from interface.ai remains open; `extract-design-system` is ready for it.
+- **References:** Project owner's request; `skills-lock.json`;
+  `AGENTS.md` ## Skills; skills.sh leaderboard (2026-09-08).
