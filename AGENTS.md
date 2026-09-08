@@ -75,6 +75,45 @@ lib/utils.ts            # cn() re-exported from the `cn` package
 public/
 ```
 
+## Brand (BankGPT)
+
+The product brand is **BankGPT** (<https://bankgpt.ai/>), not interface.ai's
+corporate blue/yellow identity. The full design system lives in
+[context/design/DESIGN.md](context/design/DESIGN.md) with machine-readable
+tokens in [context/design/tokens.json](context/design/tokens.json); source
+assets (logo mark, lockup, favicon, OG reference) are in
+[context/design/assets/](context/design/assets/). Summary:
+
+- **Dark-first.** Brand background `#09090B`; cards `#131316`; hairline
+  borders are white at 6%. Dark mode is the brand-native mode.
+- **Two accents:** emerald `#10B981` (primary actions — button text on
+  emerald is deep green `#042F23`, never white) and violet `#8B5CF6` /
+  indigo `#6366F1`. Signature gradient: `105deg, #6366F1 → #8B5CF6 42% →
+  #10B981`, used on emphasized headline words and stat numerals.
+- **Type:** Inter for everything; IBM Plex Mono for uppercase
+  eyebrows/labels (letter-spacing `.14em`, emerald-soft `#34D399`).
+- **Shape:** buttons and badges are full pills (`border-radius: 100px`);
+  cards 14–20px radius.
+- **Logo:** two overlapping circles (violet at 85% + emerald) + "BankGPT" in
+  Inter 600. App copies live in `apps/frontend/public/` (`bankgpt-logo.svg`,
+  `bankgpt-mark.svg`, `favicon.svg` + PNG fallbacks) — **only** the logo and
+  favicon go in `public/`; all other design material stays in
+  `context/design/`.
+- The shadcn theme in `apps/frontend/app/globals.css` implements these
+  tokens; keep it in sync with `context/design/DESIGN.md` when the brand
+  changes. The OG image is generated from `context/design/og-image.html`
+  (headless Chromium, 1200×630) into `context/design/og-image.png`.
+
+## Scope priority
+
+`context/company/`, `context/bankgpt/`, and `context/design/` are reference
+material — use them to inform design and product decisions, but they do not
+change the deliverable. **The main goal is to complete
+[what-we-are-building.md](context/what-we-are-building.md)** (the
+computer-use automation assignment). When reference material and the
+assignment conflict, the assignment wins; surface the conflict instead of
+silently expanding scope.
+
 ## Stack
 
 ### apps/frontend
@@ -131,9 +170,6 @@ for frontend work.
   source of truth; derive types with `z.infer<typeof schema>` instead of
   hand-writing matching interfaces. Never write inline regex/manual
   validators in components when a zod schema can express them.
-
-EVM/wallet conventions from the owner's other projects are **not** relevant
-here.
 
 #### AI SDK (apps/frontend)
 

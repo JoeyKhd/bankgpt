@@ -356,3 +356,88 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   a skill install, delete it. The extra assistant-ui skills are documented
   as optional references, not conventions.
 - **References:** Project owner's request; `skills-lock.json`; D-014.
+
+### D-016 — 2026-09-08T21:23:02Z — Company and BankGPT research captured in context/
+
+- **Status:** accepted
+- **Decision/change:** Added [company.md](company.md) (interface.ai company
+  profile: founded 2015 as Payjo, Palo Alto HQ, $30M Avataar round Oct 2024,
+  100+ institutions, product portfolio) and [bankgpt/bankgpt.md](bankgpt/bankgpt.md)
+  (BankGPT platform: launched 2025-11-18, one-brain agentic architecture,
+  25+ core integrations, SOC 2 / ISO 27001, vendor-reported results, plus a
+  section on the separate bankgpt.ai consumer hiring site). Both researched
+  by background subagents against primary sources with inline citations.
+- **Why:** The project owner asked for proper research on interface.ai as a
+  company and on BankGPT as a product to inform design and product decisions.
+- **Consequences/follow-up:** These files are reference material only; the
+  deliverable stays [what-we-are-building.md](what-we-are-building.md) (see
+  AGENTS.md "Scope priority"). Vendor-published claims (automation rates,
+  savings) are labeled as such in the reports.
+- **References:** Project owner's request; `context/company/company.md`;
+  `context/bankgpt/bankgpt.md`.
+
+### D-017 — 2026-09-08T21:23:02Z — BankGPT (bankgpt.ai) brand design system; supersedes the interface.ai brand direction
+
+- **Status:** accepted
+- **Decision/change:** Extracted the BankGPT brand from
+  <https://bankgpt.ai/> into [design/DESIGN.md](design/DESIGN.md) +
+  [design/tokens.json](design/tokens.json): dark-first palette (`#09090B`
+  bg, emerald `#10B981` primary, violet `#8B5CF6` / indigo `#6366F1`
+  accents, 105deg brand gradient), Inter + IBM Plex Mono, pill
+  buttons/badges, 14–20px card radii, venn-circle logo. Token values come
+  from the site's own `:root` custom properties (archived at
+  design/extract-bankgpt-site.css), not eyeballing. The project owner first
+  asked for the interface.ai corporate brand, then redirected to BankGPT —
+  the interface.ai extraction (blue `#093EB0` / yellow `#FDCD48`, Manrope)
+  was discarded; BankGPT is the product brand.
+- **Why:** Project owner's redirect: "Instead of using the brand/design of
+  interface.ai, we should use bankgpt's one: https://bankgpt.ai/".
+- **Consequences/follow-up:** shadcn theme, fonts, logo/favicon, and OG
+  image all follow the BankGPT system (D-018, D-019). If bankgpt.ai ships a
+  light theme later, re-derive the light-mode tokens from it.
+- **References:** Project owner's messages; https://bankgpt.ai/;
+  `context/design/DESIGN.md`; `context/design/tokens.json`.
+
+### D-018 — 2026-09-08T21:23:02Z — BankGPT shadcn theme + Inter/IBM Plex Mono fonts in apps/frontend
+
+- **Status:** accepted
+- **Decision/change:** Rewrote `apps/frontend/app/globals.css` as the BankGPT
+  shadcn theme: dark mode uses the site's exact tokens (`--background` =
+  `#09090B`, `--primary` = emerald-bright with deep-green `#042F23`
+  foreground, white-6% borders, indigo-glow accent surface, brand chart
+  ramp); light mode derives the same hues on light surfaces; `--radius`
+  anchored at 1rem (brand cards are 14–20px; buttons are full pills via
+  component classes). Switched `app/layout.tsx` fonts from Geist to Inter
+  (`--font-sans`) + IBM Plex Mono 400/500 (`--font-mono`) via
+  `next/font/google` — both are in the installed Next.js font catalog, so no
+  build-time network fetch is needed.
+- **Why:** Project owner asked for a precise shadcn theme matching
+  DESIGN.md.
+- **Consequences/follow-up:** Keep `globals.css` in sync with
+  `context/design/DESIGN.md` when the brand changes (convention recorded in
+  AGENTS.md "Brand"). `pnpm lint`, `typecheck`, and `build` all pass.
+- **References:** Project owner's request; D-017;
+  `apps/frontend/app/globals.css`; `apps/frontend/app/layout.tsx`.
+
+### D-019 — 2026-09-08T21:23:02Z — BankGPT logo, favicon, and generated OG image
+
+- **Status:** accepted
+- **Decision/change:** Added the BankGPT logo (venn-circle mark + Inter 600
+  wordmark lockup, reproduced from the site's nav component) and favicon
+  (the site's own SVG + rendered 32px PNG and 180px apple-touch-icon) to
+  `apps/frontend/public/` — per the project owner, only logo and favicon
+  files go there. Wired `icons` + title/description metadata in
+  `app/layout.tsx`. Generated a 1200×630 OG image
+  (`context/design/og-image.png`) from `context/design/og-image.html` with
+  headless Chromium, modeled on the site's own OG
+  (`context/design/assets/bankgpt-og-reference.png`): dark bg, ambient
+  indigo/emerald glows, mono eyebrow badge, gradient headline.
+- **Why:** Project owner asked for the right logo/favicon and a beautiful OG
+  image based on DESIGN.md, with design material saved in context/design.
+- **Consequences/follow-up:** Regenerate the OG image with
+  `npx playwright screenshot --viewport-size=1200,630
+  context/design/og-image.html context/design/og-image.png` after brand or
+  copy changes. The OG image is not yet referenced from app metadata — wire
+  it when the app's public pages take shape.
+- **References:** Project owner's request; D-017; `context/design/`;
+  `apps/frontend/public/`.
