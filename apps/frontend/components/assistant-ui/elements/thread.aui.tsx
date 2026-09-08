@@ -27,6 +27,7 @@ import { useMounted } from "@/hooks/use-mounted"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
+import { subscribeDictationErrors } from "@/lib/dictation"
 import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,
@@ -62,6 +63,8 @@ import {
 import {
   createContext,
   useContext,
+  useEffect,
+  useState,
   type ComponentType,
   type FC,
   type PropsWithChildren,
@@ -285,6 +288,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
         }
       >
         <ComposerAttachments />
+        <DictationErrorBanner />
         <ComposerPrimitive.Input
           placeholder="Send a message..."
           className="aui-composer-input max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 caret-primary outline-none placeholder:text-muted-foreground/60"
@@ -304,6 +308,39 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
 const ClientGate: FC<PropsWithChildren> = ({ children }) => {
   const mounted = useMounted()
   return <div className={mounted ? "contents" : "invisible"}>{children}</div>
+}
+
+// Surfaces dictation failures (unsupported browser, denied mic permission,
+// unreachable speech service) that would otherwise only appear in the
+// console as `Dictation error: "<code>"`.
+const DictationErrorBanner: FC = () => {
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (error == null) return
+    const timeout = setTimeout(() => setError(null), 6000)
+    return () => clearTimeout(timeout)
+  }, [error])
+
+  useEffect(() => subscribeDictationErrors(setError), [])
+
+  if (error == null) return null
+  return (
+    <div
+      role="alert"
+      className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+    >
+      <span>{error}</span>
+      <button
+        type="button"
+        onClick={() => setError(null)}
+        aria-label="Dismiss"
+        className="shrink-0 cursor-pointer text-destructive/70 hover:text-destructive"
+      >
+        ✕
+      </button>
+    </div>
+  )
 }
 
 const ComposerAction: FC = () => {

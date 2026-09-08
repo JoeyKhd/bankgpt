@@ -7,7 +7,6 @@ import {
   Suggestions,
   Tools,
   useRemoteThreadListRuntime,
-  WebSpeechDictationAdapter,
 } from "@assistant-ui/react"
 import { useChatRuntime, useThreadTokenUsage } from "@assistant-ui/ai-sdk"
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from "ai"
@@ -28,6 +27,7 @@ import {
 } from "@/components/assistant-ui/elements/model-icons"
 import { CHAT_MODELS, DEFAULT_CHAT_MODEL_ID } from "@/lib/chat-models"
 import { threadListAdapter } from "@/lib/thread-list-adapter"
+import { createDictationAdapter } from "@/lib/dictation"
 import { useMounted } from "@/hooks/use-mounted"
 
 import toolkit from "./toolkit"
@@ -143,7 +143,7 @@ export const ChatClient = () => {
       return useChatRuntime({
         sendAutomaticallyWhen:
           lastAssistantMessageIsCompleteWithApprovalResponses,
-        adapters: { dictation: new WebSpeechDictationAdapter() },
+        adapters: { dictation: createDictationAdapter() },
       })
     },
   })

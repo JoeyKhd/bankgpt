@@ -921,3 +921,33 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `apps/frontend/app/(app)/admin/admin-shell.tsx`,
   `apps/frontend/app/login/login-form.tsx`,
   `apps/frontend/public/bankgpt-mark.svg`.
+
+## D-041 — 2026-09-08T23:33:08Z — Gate dictation on browser support and surface failures in the composer
+
+- **Status:** accepted
+- **Decision/change:** New `lib/dictation.ts` owns dictation setup.
+  `createDictationAdapter()` returns `undefined` when
+  `WebSpeechDictationAdapter.isSupported()` is false, so the runtime's
+  dictation capability — and thus the composer mic button — stays off in
+  browsers where clicking it could never work.
+  `ReportingDictationAdapter` wraps the Web Speech adapter and forwards
+  recognition failures to a new `DictationErrorBanner` in the composer
+  (dismissible, auto-hides after 6s) with per-code messages (`network`,
+  `not-allowed`, `audio-capture`, `no-speech`, ...). Root cause of the
+  owner-reported `Dictation error: "network" ""`: Chrome's
+  `SpeechRecognition` proxies audio to Google's servers and raises
+  `network` when that service is unreachable — environmental, not an app
+  bug; previously it surfaced only as a `console.error`.
+- **Why:** Owner clicked the mic and got nothing but a console error; the
+  failure was invisible in the UI and the button appeared even in
+  unsupported browsers.
+- **Consequences/follow-up:** `console.error` is wrapped for the duration
+  of `adapter.listen()` to recover the error code the library only logs;
+  all other `console.error` calls pass through untouched. Actually making
+  dictation work needs a browser whose speech service is reachable (real
+  Chrome/Edge/Safari, online); a self-hosted adapter (e.g. local Whisper)
+  would be a follow-up if offline dictation is wanted.
+- **References:** `apps/frontend/lib/dictation.ts`,
+  `apps/frontend/app/(app)/chat/chat-client.tsx`,
+  `apps/frontend/components/assistant-ui/elements/thread.aui.tsx`,
+  `@assistant-ui/core/dist/adapters/speech.js`.
