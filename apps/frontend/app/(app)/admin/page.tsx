@@ -86,7 +86,7 @@ export default async function AdminOverviewPage() {
   const openInterventions = 0 // engine not connected yet
 
   return (
-    <div className="flex max-w-4xl flex-col gap-8">
+    <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-1.5">
         <span className={monoEyebrow}>Automation console</span>
         <h1 className="text-2xl font-semibold tracking-tight">

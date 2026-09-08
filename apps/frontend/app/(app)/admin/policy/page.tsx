@@ -24,7 +24,7 @@ const TypeChip = ({ children }: { children: React.ReactNode }) => (
 // with the engine. Editable policy is a later decision, not promised here.
 export default function PolicyPage() {
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
         <h1 className="text-2xl font-semibold tracking-tight">Safety policy</h1>
         <p className="text-sm leading-relaxed text-muted-foreground">

@@ -666,3 +666,18 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** `AGENTS.md` (Code style), `apps/frontend/app/(app)/`,
   `apps/frontend/app/login/`, `apps/frontend/components/admin/`.
 
+## D-029 — 2026-09-08T22:34:26Z — Admin console content is full width
+
+- **Status:** accepted
+- **Decision/change:** Removed the `max-w-4xl`/`max-w-3xl`/`max-w-2xl`
+  constraints from all `/admin` content wrappers (overview, policy, users,
+  system, and the `PageStub` used by discover/capabilities/runs/
+  interventions) so content spans the full shell width. Recorded the
+  convention in `AGENTS.md` under Code style.
+- **Why:** Owner direction — constrained columns waste the console's
+  horizontal space.
+- **Consequences/follow-up:** Future admin surfaces stay full width; size
+  inner elements individually when a measure is needed.
+- **References:** `AGENTS.md` (Code style), `apps/frontend/app/(app)/admin/`,
+  `apps/frontend/components/admin/page-stub.tsx`.
+

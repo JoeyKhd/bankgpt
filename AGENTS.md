@@ -278,6 +278,8 @@ stop and report).
   not rewrite existing `function` declarations only to match this style.
 - Use Tailwind's named font-size scale (`text-xs`, `text-sm`, ...) instead of
   arbitrary pixel sizes such as `text-[10px]`.
+- Admin console content spans the full shell width. Do not add `max-w-*`
+  constraints to `/admin` content wrappers.
 
 ## Research and documentation tools
 

@@ -10,7 +10,7 @@ type PageStubProps = {
 // depend on the automation engine (apps/engine). Documents what is planned
 // so the console navigation is complete while the engine is built.
 export const PageStub = ({ title, description, planned }: PageStubProps) => (
-  <div className="flex max-w-2xl flex-col gap-6">
+  <div className="flex flex-col gap-6">
     <div className="flex flex-col gap-1.5">
       <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
       <p className="text-sm leading-relaxed text-muted-foreground">
