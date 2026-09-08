@@ -89,3 +89,22 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   the product scope. Future references should use the path under `context/`.
 - **References:** Project owner's file-location clarification; D-001;
   `context/what-we-are-building.md`.
+
+### D-004 — 2026-09-08T19:32:47Z — Make the documentation and commit workflow explicit
+
+- **Status:** accepted
+- **Decision/change:** Update `AGENTS.md` to reference
+  `context/what-we-are-building.md` and `thought-process.md`, preserve the
+  distinction between requirements and implementation choices, and require
+  ongoing ledger entries plus focused commits with short emoji messages and
+  GitHub pushes.
+- **Why:** The project owner requested both references and a commit for each
+  fix or change. Shared instructions keep future work aligned with the agreed
+  scope and make the decision history easy to maintain.
+- **Consequences/follow-up:** Future agents must wait for the owner's
+  implementation direction, check relevant changes before committing, stage
+  only related files, and report any push blocker rather than rewriting history.
+- **References:** Project owner's documentation and commit requests; D-001–D-003;
+  `AGENTS.md`. Documentation review found no substantive requirement or scope
+  issues; all 11 relative Markdown links resolve and the first staged diff
+  passed `git diff --cached --check`.
