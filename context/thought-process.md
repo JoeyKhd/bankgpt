@@ -332,3 +332,27 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** Project owner's request; https://www.assistant-ui.com/
   llms.txt + /docs/runtimes/ai-sdk/v7.md + /docs/integrations/gateways.md;
   `AGENTS.md` #### AI SDK + ## Skills; D-013.
+
+### D-015 — 2026-09-08T21:04:07Z — Clean up skill-folder layout; one canonical `.agents/skills/`
+
+- **Status:** accepted
+- **Decision/change:** Deleted the untracked `agent/skills/` duplicate (a
+  plain copy the `npx skills add assistant-ui/skills --all` run wrote beside
+  the canonical `.agents/skills/` because `--all` includes `--agent '*'`;
+  the two trees held identical assistant-ui skill content with frontmatter
+  normalized differently). Committed the remaining untracked assistant-ui
+  skills from `.agents/skills/` (`cloud`, `copilots`, `elements`,
+  `generative-ui`, `ink`, `markdown`, `observability`, `react-mcp`,
+  `react-native`, `setup`, `thread-list`, `update`) — 17 total from that
+  repo, all already in `skills-lock.json`. Updated `AGENTS.md` ## Skills and
+  the #### AI SDK bullet to name the useful sub-skills.
+- **Why:** The project owner asked whether `agent/` and `.agents/` could be
+  merged. `.agents/skills/` is the canonical store the lock file tracks and
+  other agents symlink from (`.claude/skills/`), so the copy goes, not the
+  canonical folder.
+- **Consequences/follow-up:** Convention: never use `--all` with the skills
+  CLI; install with explicit `-s <names>` (adds only to `.agents/skills/` +
+  the gitignored `.claude/` symlinks). If an `agent/` folder reappears after
+  a skill install, delete it. The extra assistant-ui skills are documented
+  as optional references, not conventions.
+- **References:** Project owner's request; `skills-lock.json`; D-014.

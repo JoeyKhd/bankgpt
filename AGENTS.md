@@ -150,7 +150,9 @@ here.
   handlers stream with `streamText` + `convertToModelMessages` (async in v7)
   and return `createUIMessageStreamResponse`; the client uses
   `useChatRuntime`. Docs are markdown-first: append `.md` to any docs page
-  URL, and use the `assistant-ui` skills.
+  URL, and use the `assistant-ui` skills (`runtime` when choosing/wiring a
+  runtime, `elements` for the Thread component set, `streaming`/`tools` for
+  those behaviors).
 
 ### Database and authentication (apps/frontend)
 
@@ -270,9 +272,11 @@ relevant skill before starting a matching task:
   agents, tool calling, structured output, useChat
 - `openrouter-models` (official OpenRouter) — OpenRouter model catalog,
   pricing, and capability lookup
-- `assistant-ui` + `streaming`, `tools`, `primitives`, `runtime` (official
-  assistant-ui) — building chat UIs: component registry, streaming behavior,
-  tool UIs, primitives, runtime selection
+- `assistant-ui` (official assistant-ui) — full skill set for building chat
+  UIs: `runtime`, `streaming`, `tools`, `primitives`, `elements`,
+  `thread-list`, `cloud`, `setup` cover the core; `copilots`,
+  `generative-ui`, `markdown`, `observability`, `ink`, `react-mcp`,
+  `react-native`, `update` are there if those surfaces ever matter
 - `extract-design-system` — extract design tokens from a public website; use
   for the planned `DESIGN.md` from the interface.ai company site
 - `code-review`, `tdd`, `diagnosing-bugs`, `codebase-design`,
