@@ -843,3 +843,26 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `apps/frontend/components/assistant-ui/elements/model-icons.tsx`,
   <https://openrouter.ai/announcements/introducing-nitro-and-floor-price-shortcuts>.
 
+
+## D-037 — 2026-09-08T23:21:24Z — Persist generated thread titles (title was lost on refresh)
+
+- **Status:** accepted
+- **Decision/change:** `POST /api/threads/[threadId]/title` now persists the
+  generated title with `renameThread` before streaming it back. Root cause:
+  assistant-ui's `RemoteThreadListThreadListRuntimeCore.generateTitle`
+  applies the streamed title as optimistic local state only — its `execute`
+  callback is a no-op and it never calls `adapter.rename` — so persistence is
+  the endpoint's job, and the route never wrote to SQLite. Symptom: a
+  generated title appeared in the sidebar until refresh, then reverted to
+  "New Chat" (the ThreadList fallback for a null title). Also hardened the
+  title string: empty model output falls back to "New Chat" and the value is
+  clamped to 200 chars to match the PATCH schema.
+- **Why:** Owner-reported bug — new threads always show "New Chat" after a
+  refresh even though a summary title briefly appears.
+- **Consequences/follow-up:** Threads that already have a null title stay
+  untitled. If title generation fails server-side, the thread keeps its
+  previous title and the client logs the error (unchanged behavior).
+- **References:** `apps/frontend/app/api/threads/[threadId]/title/route.ts`,
+  `apps/frontend/lib/chat-threads.ts`,
+  `@assistant-ui/core/dist/react/runtimes/RemoteThreadListThreadListRuntimeCore.js`
+  (`generateTitle`, ~lines 534–570).

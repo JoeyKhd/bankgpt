@@ -3,7 +3,7 @@ import { generateText } from "ai"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { z } from "zod"
 
-import { getThread } from "@/lib/chat-threads"
+import { getThread, renameThread } from "@/lib/chat-threads"
 import { requireSession } from "@/lib/require-session"
 
 export const maxDuration = 30
@@ -76,6 +76,11 @@ export const POST = async (
       }),
       prompt: `Write a conversation title of at most 6 words for this transcript. Reply with the title only — no quotes, no trailing punctuation.\n\n${transcript}`,
     })
-    controller.appendText(text.trim().split("\n")[0] ?? "New Chat")
+    const title = (text.trim().split("\n")[0] || "New Chat").slice(0, 200)
+    // The runtime applies the streamed title as optimistic local state only
+    // (its execute callback is a no-op) — persisting is this endpoint's job,
+    // otherwise the generated title is gone on the next page load.
+    renameThread(threadId, session.user.id, title)
+    controller.appendText(title)
   })
 }
