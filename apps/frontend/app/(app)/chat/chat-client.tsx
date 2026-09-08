@@ -8,7 +8,9 @@ import {
 } from "@assistant-ui/react"
 import { useChatRuntime, useThreadTokenUsage } from "@assistant-ui/ai-sdk"
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from "ai"
+import { LayoutDashboardIcon } from "lucide-react"
 import Image from "next/image"
+import Link from "next/link"
 
 import { Thread } from "@/components/assistant-ui/elements/thread.aui"
 import { ModelSelector } from "@/components/assistant-ui/elements/model-selector.aui"
@@ -94,6 +96,13 @@ export const ChatClient = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              href="/admin"
+              className="flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-emerald-400/25 hover:text-foreground"
+            >
+              <LayoutDashboardIcon className="size-3.5" />
+              Console
+            </Link>
             <TokenUsage />
             <ModelSelector
               models={CHAT_MODELS.map((model) => ({

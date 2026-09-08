@@ -5,5 +5,5 @@ import { auth } from "@/lib/auth"
 
 export default async function HomePage() {
   const session = await auth.api.getSession({ headers: await headers() })
-  redirect(session ? "/chat" : "/login")
+  redirect(session ? "/admin" : "/login")
 }

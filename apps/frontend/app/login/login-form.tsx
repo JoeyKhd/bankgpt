@@ -38,7 +38,7 @@ export const LoginForm = () => {
         const { error } = await authClient.signIn.email({ email, password })
         if (error) throw new Error(error.message)
       }
-      router.replace("/chat")
+      router.replace("/admin")
     } catch (failure) {
       setError(
         failure instanceof Error ? failure.message : "Something went wrong"

@@ -615,3 +615,38 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** `apps/frontend/app/(app)/chat/`, `app/api/chat/route.ts`,
   `lib/capabilities-catalog.ts`, `lib/chat-models.ts`; D-013, D-014, D-025;
   assistant-ui skills (setup/tools/elements).
+
+### D-027 — 2026-09-08T22:32:29Z — `/admin` operator console + first-user-admin roles
+
+- **Status:** accepted
+- **Decision/change:** Built the `/admin` operator console (D-024) and the
+  role system (D-022). Roles: `admin` | `operator` as a nullable
+  `user.additionalFields.role` (nullable so pre-existing rows migrate; hook
+  always sets it for new users). First-user rule: a better-auth
+  `databaseHooks.user.create.before` hook assigns `admin` when the user
+  table is empty. better-auth `admin` plugin (custom access controller with
+  roles named `admin`/`operator`, default `operator`, adminRoles
+  `["admin"]`) provides server-enforced `/admin/list-users` +
+  `/admin/set-role`. Routes: `/admin` overview (greeting, capability stats
+  from the stub catalog, quick actions, role-aware), `/admin/discover` +
+  `/admin/capabilities` + `/admin/runs` + `/admin/interventions` as
+  `PageStub` placeholders that document what lands with the engine, and
+  admin-only `/admin/users` (role management table), `/admin/policy`
+  (read-only safety policy), `/admin/system` (env-key + DB status, never
+  values). Admin-only routes share a server-side `AdminOnlyLayout` guard
+  (redirect to `/admin`); the whole console sits behind the `(app)` auth
+  guard. Shared `AdminShell` sidebar hides Manage links for non-admins and
+  shows the signed-in email + role. `/` now redirects to `/admin`; login
+  and the chat header link there too.
+- **Why:** Owner direction (D-024, D-022). The console is where operators
+  and reviewers work; management surfaces need a real admin gate.
+- **Consequences/follow-up:** Migration re-run added `role` + admin-plugin
+  columns (nullable, so the two pre-existing rows migrated cleanly; the
+  owner backfilled to admin by oldest-first then corrected manually). The
+  better-auth CLI's migrate needs `defaultRole`/`adminRoles` set or it
+  fails on NOT NULL role with a NULL default. `listUsers`/`setRole` are
+  admin-plugin endpoints — server-enforced, not just UI-hidden. Verified by
+  the owner manually. The four engine-dependent surfaces are honest stubs;
+  their planned content is listed on each page.
+- **References:** `apps/frontend/app/(app)/admin/`, `lib/auth.ts`,
+  `lib/auth-client.ts`, `lib/roles.ts`; D-010, D-022, D-024, D-026.
