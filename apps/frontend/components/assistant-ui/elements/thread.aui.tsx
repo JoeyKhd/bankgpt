@@ -43,6 +43,7 @@ import {
   type ImageMessagePartComponent,
   type ToolCallMessagePartComponent,
   useAuiState,
+  useMessageTiming,
 } from "@assistant-ui/react"
 import {
   ArrowDownIcon,
@@ -510,6 +511,30 @@ const AssistantMessage: FC = () => {
   )
 }
 
+// Timing is tracked client-side by useChatRuntime and stored on
+// message.metadata.timing; token counts are estimates (text length / 4).
+const MessageTimingBadge: FC = () => {
+  const timing = useMessageTiming()
+  if (timing?.tokensPerSecond == null) return null
+  const title = [
+    `${timing.tokensPerSecond.toFixed(1)} tokens/s (estimated)`,
+    timing.firstTokenTime != null &&
+      `first token in ${(timing.firstTokenTime / 1000).toFixed(2)} s`,
+    timing.totalStreamTime != null &&
+      `streamed for ${(timing.totalStreamTime / 1000).toFixed(2)} s`,
+  ]
+    .filter(Boolean)
+    .join(" · ")
+  return (
+    <span
+      title={title}
+      className="flex items-center px-1 text-xs text-muted-foreground/70 tabular-nums select-none"
+    >
+      {timing.tokensPerSecond.toFixed(1)} tok/s
+    </span>
+  )
+}
+
 const AssistantActionBar: FC = () => {
   return (
     <ActionBarPrimitive.Root
@@ -557,6 +582,7 @@ const AssistantActionBar: FC = () => {
           </ActionBarPrimitive.ExportMarkdown>
         </ActionBarMorePrimitive.Content>
       </ActionBarMorePrimitive.Root>
+      <MessageTimingBadge />
     </ActionBarPrimitive.Root>
   )
 }
