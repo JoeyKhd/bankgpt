@@ -63,7 +63,10 @@ class TransientServerError extends Error {
 const substitute = (template: string, inputs: ReplayInputs): string =>
   template.replace(/\{\{(\w+)\}\}/g, (_m, name: string) => {
     if (!(name in inputs)) {
-      throw new Error(`no value supplied for input "${name}"`)
+      // An OPTIONAL input the caller omitted substitutes as empty (e.g. the
+      // demo teller console accepts blank credentials); a REQUIRED input is
+      // caught earlier by validateInputs, so this is never a silent skip.
+      return ""
     }
     return String(inputs[name])
   })
@@ -293,11 +296,17 @@ const executeExtract = async (
       if (!step.pattern)
         throw new Error("extract(page-text-match) needs a pattern")
       const body = await page.locator("body").innerText()
-      const match = body.match(new RegExp(step.pattern))
-      if (!match || match[1] === undefined) {
+      // Whitespace-normalize before matching: legacy table layouts render
+      // cell boundaries as newlines, and \s in the pattern must match them.
+      const normalized = body.replace(/\s+/g, " ")
+      const match = normalized.match(new RegExp(step.pattern))
+      // With several groups the LAST one is the value (earlier groups are
+      // anchors, e.g. the nickname column before the balance column).
+      const value = match?.slice(1).findLast((g) => g !== undefined)
+      if (!match || value === undefined) {
         throw new Error(`pattern /${step.pattern}/ did not match page text`)
       }
-      return match[1].trim()
+      return value.trim()
     }
   }
 }
