@@ -126,3 +126,24 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   until the owner explains how this project will be built.
 - **References:** Project owner's shared `AGENTS.md` conventions; D-004;
   `AGENTS.md`.
+
+### D-006 — 2026-09-08T19:56:02Z — Record the frontend scaffold conventions
+
+- **Status:** accepted
+- **Decision/change:** The project owner added a Next.js + shadcn app at
+  `apps/frontend` (standalone pnpm package with its own lockfile; Next.js
+  16.2.6, React 19, Tailwind 4, shadcn `base-nova`/neutral, `@base-ui/react`,
+  `lucide-react`, `next-themes` with `d` toggle, Geist fonts, `@/*` alias).
+  `AGENTS.md` now records the verified layout, stack, package-manager,
+  lint/format, definition-of-done, and code-style conventions for it.
+- **Why:** With a real frontend scaffold present, the relevant conventions
+  from the owner's other project apply and should live in the repo. Each claim
+  was verified against the actual files (`package.json`, `components.json`,
+  configs, scaffold layout), not copied from prose.
+- **Consequences/follow-up:** EVM/Privy conventions stay out per the owner.
+  No test runner exists yet; one joins the definition of done when added.
+  TanStack/zod are recorded as the owner's not-yet-installed defaults, to be
+  confirmed when the need arises. `apps/frontend` itself is still the owner's
+  uncommitted work and was not staged with this change.
+- **References:** Project owner's message; `apps/frontend/package.json`;
+  `apps/frontend/components.json`; `apps/frontend/AGENTS.md`; D-005.

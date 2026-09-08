@@ -27,10 +27,11 @@ twice. Conventions live in the repository, not only in agent memory.
 - `context/what-we-are-building.md` describes **what**, not **how**. Keep
   architecture, technology selections, and implementation recipes out of that
   document.
-- The project owner will explain the implementation approach later. Do not
-  select a stack, model, target application, schema, or other implementation
-  strategy before that direction is provided. Ask when a pending choice blocks
-  work instead of treating an assumption as an agreed decision.
+- The project owner explains the implementation approach; the conventions below
+  describe the scaffold that exists, not the full architecture. Do not select
+  new stack pieces (models, agent frameworks, storage) without the owner's
+  direction. Ask when a pending choice blocks work instead of treating an
+  assumption as an agreed decision.
 - Do not turn examples, optional stretch goals, or design-only considerations
   into required implementation scope.
 - Keep the product brief current when scope is explicitly clarified. Record
@@ -52,6 +53,98 @@ twice. Conventions live in the repository, not only in agent memory.
   working notes. Never include secrets, credentials, tokens, or sensitive data.
 - The ledger supports the required `REPORT.md`; it does not replace that report
   or run evidence in `/evidence/`.
+
+## Layout
+
+```
+apps/
+  frontend/             # Next.js 16 + shadcn app (standalone pnpm package)
+context/                # project knowledge base — research + decisions as markdown
+```
+
+The frontend was scaffolded from a shadcn template and follows its structure:
+
+```
+app/                    # Next.js App Router (layout.tsx, page.tsx, globals.css)
+components/             # React components; components/ui/ = shadcn components
+components/theme-provider.tsx  # next-themes provider (`d` toggles dark/light)
+hooks/                  # React hooks
+lib/utils.ts            # cn() re-exported from the `cn` package
+public/
+```
+
+## Stack
+
+### apps/frontend
+
+- **Next.js 16.2.6** (App Router) + **React 19** + TypeScript strict
+- **Tailwind CSS 4** (`@tailwindcss/postcss`) + `tw-animate-css` +
+  `shadcn/tailwind.css`, configured in `app/globals.css`
+- **shadcn** (`components.json`, style `base-nova`, base color `neutral`, CSS
+  variables, RSC mode); add components with `pnpm dlx shadcn add <component>`
+- `@base-ui/react` — the underlying primitives shadcn components are built on
+  here
+- `lucide-react` for icons
+- `next-themes` for dark mode (`ThemeProvider` in `app/layout.tsx`; press `d`
+  outside text inputs to toggle)
+- Path alias: `@/*` → app root (`@/components`, `@/lib/utils`, `@/hooks`)
+- Fonts via `next/font/google`: Geist (`--font-sans`) and Geist Mono
+  (`--font-mono`) in `app/layout.tsx`
+- Scripts: `pnpm dev` / `pnpm build` / `pnpm lint` / `pnpm format` (Prettier +
+  prettier-plugin-tailwindcss) / `pnpm typecheck`
+
+**Next.js 16 is newer than your training data.** APIs, conventions, and file
+structure may differ from what you know. Follow `apps/frontend/AGENTS.md`: read
+the relevant guide in `node_modules/next/dist/docs/` before writing Next.js
+code, and heed deprecation notices. The `next-best-practices`,
+`vercel-composition-patterns`, and `web-design-guidelines` skills are relevant
+for frontend work.
+
+Not installed yet — the owner's defaults when the need arises (confirm before
+introducing): `@tanstack/query` for server state, `@tanstack/form` for forms,
+`@tanstack/markdown` for markdown, `zod` for boundary validation. EVM/wallet
+conventions from the owner's other projects are **not** relevant here.
+
+## Package manager
+
+- **pnpm only.** Never npm or yarn.
+- `apps/frontend` is a **standalone pnpm package** with its own
+  `pnpm-lock.yaml` and `pnpm-workspace.yaml`; there is no root workspace. Run
+  `pnpm install`, `pnpm dev`, and all scripts from **`apps/frontend`**, not the
+  repo root.
+
+## Linting and formatting
+
+- Lint with **ESLint** (`eslint-config-next` core-web-vitals + typescript) and
+  format with **Prettier** + `prettier-plugin-tailwindcss` (config: no
+  semicolons, double quotes, es5 trailing commas, 80 cols, `cn`/`cva` class
+  sorting against `app/globals.css`).
+- After code changes in `apps/frontend`, run `pnpm lint --fix`, then
+  `pnpm format`.
+
+## Definition of done
+
+A change is done only when the relevant checks pass **before** the commit — no
+red output, no skipped steps, no "it was already broken" (if it is, fix it or
+stop and report).
+
+- **`apps/frontend`:** `pnpm lint` (zero errors **and** zero warnings),
+  `pnpm typecheck` (zero errors), `pnpm build` (production build succeeds).
+  There is no test script yet; when one is added, it joins this list.
+- **`context/`, `thought-process.md`, and `AGENTS.md`:** no checks beyond
+  Markdown link/structure sanity and a clean staged diff.
+- If a check cannot pass yet (blocked, half-done, waiting on the user), **say
+  so and stop** — do not commit or push a red state to `main`. Never weaken
+  lint rules, add `eslint-disable`, or use `as any` / `@ts-ignore` to silence a
+  failure instead of fixing it.
+
+## Code style
+
+- Comment above the function when the why is not obvious from the code.
+- Prefer arrow functions for new code: `const nameOfFunction = () => {}`. This
+  is a preference, not a hard rule. Keep `export default function Page() {}`
+  for Next.js file-convention exports (`page.tsx`, `layout.tsx`, etc.) and do
+  not rewrite existing `function` declarations only to match this style.
 
 ## Research and documentation tools
 
@@ -96,22 +189,13 @@ Do not recover by rewriting history unless the user asks.
   commit messages, and chat output.
 - Add the name of a new environment variable, without its value, to the owning
   package's committed example environment file when one exists.
-- If you find a secret that is already committed, stop and tell the user. Do not
-  rewrite history on your own.
+- If you find a secret that is already committed, stop and tell the user. Do
+  not rewrite history on your own.
 
 ## Documentation and code quality
 
 - Markdown files may be out of sync. Verify claims from documentation against
   current files, execution results, or git history before acting on them.
-- For `context/`, `thought-process.md`, and this file, check Markdown links,
-  structure, and the staged diff. No other checks are currently defined for
-  documentation-only changes.
-- Before an implementation change, run the checks relevant to the files and
-  tools being changed. If a required check is blocked, stop and report it
-  instead of committing a known-broken state. Never weaken a check, bypass a
-  rule, or silence an error just to make a change pass.
-- Use kebab-case filenames for new files unless an existing project convention
-  requires otherwise.
 
 ## Context folder
 
@@ -123,6 +207,10 @@ Do not recover by rewriting history unless the user asks.
   required product and scope, and [the ledger](thought-process.md) records
   decisions.
 - Do not create raw data dumps. Extract useful facts into Markdown instead.
-- Do not introduce a stack, architecture, brand, layout, or package-manager
-  convention from another repository until the project owner explains how this
-  project will be built.
+- Do not introduce an architecture, brand, layout, or package-manager
+  convention from another repository until it is verified against this one.
+
+## File naming
+
+- Use **kebab-case** filenames: `theme-provider.tsx`, `use-wallet.ts`.
+- React components still export PascalCase names.
