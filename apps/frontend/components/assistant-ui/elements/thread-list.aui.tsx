@@ -229,7 +229,7 @@ export const ThreadListNew = forwardRef<
           variant="ghost"
           data-slot="aui_thread-list-new"
           className={cn(
-            "h-8 justify-start gap-2 rounded-md px-2.5 text-sm font-normal hover:bg-muted data-active:bg-muted",
+            "h-8 cursor-pointer justify-start gap-2 rounded-md px-2.5 text-sm font-normal hover:bg-muted data-active:bg-muted",
             className
           )}
           {...props}
@@ -305,7 +305,7 @@ export const ThreadListItem: FC = () => {
         <ThreadListItemPrimitive.Trigger
           ref={triggerRef}
           data-slot="aui_thread-list-item-trigger"
-          className="flex h-full min-w-0 flex-1 items-center rounded-md px-2.5 text-start text-sm outline-none group-hover:pe-9 group-has-focus-visible:pe-9 group-has-data-[state=open]:pe-9 group-data-active:pe-9 focus-visible:ring-1 focus-visible:ring-ring/50"
+          className="flex h-full min-w-0 flex-1 cursor-pointer items-center rounded-md px-2.5 text-start text-sm outline-none group-hover:pe-9 group-has-focus-visible:pe-9 group-has-data-[state=open]:pe-9 group-data-active:pe-9 focus-visible:ring-1 focus-visible:ring-ring/50"
         >
           {isRunning && (
             <Loader2Icon

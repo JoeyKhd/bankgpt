@@ -23,6 +23,7 @@ import {
   ToolGroupTrigger,
 } from "@/components/assistant-ui/elements/tool-group.aui"
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button"
+import { useMounted } from "@/hooks/use-mounted"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
@@ -223,7 +224,7 @@ const ThreadScrollToBottom: FC = () => {
         <TooltipIconButton
           tooltip="Scroll to bottom"
           variant="outline"
-          className="aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible dark:border-border dark:bg-background dark:hover:bg-accent"
+          className="aui-thread-scroll-to-bottom absolute -top-12 z-10 cursor-pointer self-center rounded-full p-4 disabled:invisible dark:border-border dark:bg-background dark:hover:bg-accent"
         />
       }
     >
@@ -297,6 +298,13 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
   )
 }
 
+// Invisible until mounted so SSR and the first client render match; client
+// capabilities (e.g. speech recognition support) resolve behind the gate.
+const ClientGate: FC<PropsWithChildren> = ({ children }) => {
+  const mounted = useMounted()
+  return <div className={mounted ? "contents" : "invisible"}>{children}</div>
+}
+
 const ComposerAction: FC = () => {
   const { ComposerLeft } = useContext(ThreadComponentsContext)
 
@@ -308,40 +316,42 @@ const ComposerAction: FC = () => {
       </div>
       <div className="flex items-center gap-1.5">
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
-          <AuiIf condition={(s) => s.composer.dictation == null}>
-            <ComposerPrimitive.Dictate
-              render={
-                <TooltipIconButton
-                  tooltip="Voice input"
-                  side="bottom"
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="aui-composer-dictate size-7 rounded-full text-muted-foreground hover:text-foreground"
-                  aria-label="Start voice input"
-                />
-              }
-            >
-              <MicIcon className="aui-composer-dictate-icon size-4" />
-            </ComposerPrimitive.Dictate>
-          </AuiIf>
-          <AuiIf condition={(s) => s.composer.dictation != null}>
-            <ComposerPrimitive.StopDictation
-              render={
-                <TooltipIconButton
-                  tooltip="Stop dictation"
-                  side="bottom"
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="aui-composer-stop-dictation size-7 rounded-full text-destructive"
-                  aria-label="Stop voice input"
-                />
-              }
-            >
-              <SquareIcon className="aui-composer-stop-dictation-icon size-3.5 animate-pulse fill-current" />
-            </ComposerPrimitive.StopDictation>
-          </AuiIf>
+          <ClientGate>
+            <AuiIf condition={(s) => s.composer.dictation == null}>
+              <ComposerPrimitive.Dictate
+                render={
+                  <TooltipIconButton
+                    tooltip="Voice input"
+                    side="bottom"
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="aui-composer-dictate size-7 cursor-pointer rounded-full text-muted-foreground hover:text-foreground"
+                    aria-label="Start voice input"
+                  />
+                }
+              >
+                <MicIcon className="aui-composer-dictate-icon size-4" />
+              </ComposerPrimitive.Dictate>
+            </AuiIf>
+            <AuiIf condition={(s) => s.composer.dictation != null}>
+              <ComposerPrimitive.StopDictation
+                render={
+                  <TooltipIconButton
+                    tooltip="Stop dictation"
+                    side="bottom"
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="aui-composer-stop-dictation size-7 cursor-pointer rounded-full text-destructive"
+                    aria-label="Stop voice input"
+                  />
+                }
+              >
+                <SquareIcon className="aui-composer-stop-dictation-icon size-3.5 animate-pulse fill-current" />
+              </ComposerPrimitive.StopDictation>
+            </AuiIf>
+          </ClientGate>
         </AuiIf>
         <AuiIf condition={(s) => !s.thread.isRunning}>
           <ComposerPrimitive.Send
@@ -352,7 +362,7 @@ const ComposerAction: FC = () => {
                 type="button"
                 variant="default"
                 size="icon"
-                className="aui-composer-send size-7 rounded-full"
+                className="aui-composer-send size-7 cursor-pointer rounded-full"
                 aria-label="Send message"
               />
             }
@@ -367,7 +377,7 @@ const ComposerAction: FC = () => {
                 type="button"
                 variant="default"
                 size="icon"
-                className="aui-composer-cancel size-7 rounded-full"
+                className="aui-composer-cancel size-7 cursor-pointer rounded-full"
                 aria-label="Stop generating"
               />
             }

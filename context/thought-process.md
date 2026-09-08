@@ -729,3 +729,29 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   typecheck + build.
 - **References:** `AGENTS.md` (Definition of done).
 
+## D-032 — 2026-09-08T22:47:17Z — Hydration-safe client-only values; pointer cursors
+
+- **Status:** accepted
+- **Decision/change:** Fixed model/effort not sticking across refresh: the
+  previous `useSyncExternalStore` read returned a different server vs client
+  snapshot (localStorage), a hydration mismatch that poisoned client state
+  for the session. Client-only values now use one of two patterns, per the
+  existing react-hooks lint rules (no `setState` in effects): lazy one-time
+  `useState` initializers gated by `typeof window` for control state
+  (model/effort), and a shared `hooks/use-mounted.ts`
+  (`useSyncExternalStore` with identical SSR + first-client snapshots) for
+  mount detection. The selector and the mic button stay mounted but
+  CSS-`invisible` until hydrated, so SSR and the first client render agree.
+  Also added `cursor-pointer` to the composer send/cancel/dictate buttons,
+  the New Thread button, thread list item triggers, and the model-selector
+  trigger, and made the selector always-controlled (effort defaults to
+  "low" so it always shows).
+- **Why:** Owner reports — effort lost on refresh; pointer cursors missing.
+- **Consequences/follow-up:** Rule of thumb for this codebase: never read
+  `window`/`localStorage` during SSR or the first client render except
+  through these two gates; a server/client snapshot mismatch is silent and
+  breaks hydration.
+- **References:** `apps/frontend/hooks/use-mounted.ts`,
+  `apps/frontend/app/(app)/chat/chat-client.tsx`,
+  `apps/frontend/components/assistant-ui/elements/thread.aui.tsx`.
+

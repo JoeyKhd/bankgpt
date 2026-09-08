@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useSyncExternalStore, type ComponentType } from "react"
+import { useState, type ComponentType } from "react"
 import {
   AssistantRuntimeProvider,
   AuiConfig,
@@ -8,7 +8,6 @@ import {
   Tools,
   useRemoteThreadListRuntime,
   WebSpeechDictationAdapter,
-  type DictationAdapter,
 } from "@assistant-ui/react"
 import { useChatRuntime, useThreadTokenUsage } from "@assistant-ui/ai-sdk"
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from "ai"
@@ -28,6 +27,7 @@ import {
 } from "@/components/assistant-ui/elements/model-icons"
 import { CHAT_MODELS, DEFAULT_CHAT_MODEL_ID } from "@/lib/chat-models"
 import { threadListAdapter } from "@/lib/thread-list-adapter"
+import { useMounted } from "@/hooks/use-mounted"
 
 import toolkit from "./toolkit"
 
@@ -56,68 +56,57 @@ const MODEL_OPTIONS = CHAT_MODELS.map((model) => {
 const MODEL_STORAGE_KEY = "bankgpt.chat.model"
 const EFFORT_STORAGE_KEY = "bankgpt.chat.effort"
 
-const subscribeNoop = () => () => {}
-
-// undefined = not evaluated yet; null = evaluated, unsupported.
-let cachedDictation: DictationAdapter | null | undefined
-
-const readDictation = (): DictationAdapter | undefined => {
-  if (cachedDictation === undefined) {
-    cachedDictation = WebSpeechDictationAdapter.isSupported()
-      ? new WebSpeechDictationAdapter()
-      : null
-  }
-  return cachedDictation ?? undefined
-}
-
-// Hydration-safe read of a client-only value: the server snapshot is the
-// fallback, the real value appears on the first client re-render.
-const useClientValue = <T,>(read: () => T, serverValue: T): T =>
-  useSyncExternalStore(subscribeNoop, read, () => serverValue)
+// Client-only values (localStorage, browser APIs) must not influence SSR or
+// the first client render: they are read lazily on the client-only render
+// pass and revealed through a CSS visibility gate, which avoids a hydration
+// mismatch that would poison client state for the rest of the session.
+const isClient = typeof window !== "undefined"
 
 const readStoredModel = () => {
+  if (!isClient) return DEFAULT_CHAT_MODEL_ID
   const stored = localStorage.getItem(MODEL_STORAGE_KEY)
-  return stored && MODEL_OPTIONS.some((m) => m.id === stored) ? stored : null
+  return stored && MODEL_OPTIONS.some((m) => m.id === stored)
+    ? stored
+    : DEFAULT_CHAT_MODEL_ID
+}
+
+const readStoredEffort = () => {
+  if (!isClient) return "low"
+  const stored = localStorage.getItem(EFFORT_STORAGE_KEY)
+  return stored === "low" || stored === "medium" || stored === "high"
+    ? stored
+    : "low"
 }
 
 // Model + effort picker rendered inside the composer, next to attachments.
 // The selection registers itself with the thread's model context; the last
-// choice is restored from localStorage.
+// choice is restored from localStorage. Kept hidden (but mounted) until after
+// hydration so SSR and the first client render agree.
 const ComposerModelSelector = () => {
-  // Explicit choice this session wins; localStorage is the fallback.
-  const [chosenModel, setChosenModel] = useState<string | null>(null)
-  const [chosenEffort, setChosenEffort] = useState<string | null>(null)
-  const storedModel = useClientValue(readStoredModel, null)
-  const storedEffort = useClientValue(
-    () => localStorage.getItem(EFFORT_STORAGE_KEY),
-    null
-  )
-
-  const model = chosenModel ?? storedModel ?? DEFAULT_CHAT_MODEL_ID
-  const effort = chosenEffort ?? storedEffort
+  const [model, setModel] = useState<string>(readStoredModel)
+  const [effort, setEffort] = useState<string>(readStoredEffort)
+  const mounted = useMounted()
 
   return (
-    <ModelSelector
-      models={MODEL_OPTIONS}
-      value={model}
-      onValueChange={(next) => {
-        setChosenModel(next)
-        localStorage.setItem(MODEL_STORAGE_KEY, next)
-      }}
-      {...(effort != null
-        ? {
-            effort,
-            onEffortChange: (next: string) => {
-              setChosenEffort(next)
-              localStorage.setItem(EFFORT_STORAGE_KEY, next)
-            },
-          }
-        : {})}
-      variant="ghost"
-      size="sm"
-      className="rounded-full"
-      searchable
-    />
+    <div className={mounted ? "contents" : "invisible"}>
+      <ModelSelector
+        models={MODEL_OPTIONS}
+        value={model}
+        onValueChange={(next) => {
+          setModel(next)
+          localStorage.setItem(MODEL_STORAGE_KEY, next)
+        }}
+        effort={effort}
+        onEffortChange={(next) => {
+          setEffort(next)
+          localStorage.setItem(EFFORT_STORAGE_KEY, next)
+        }}
+        variant="ghost"
+        size="sm"
+        className="rounded-full"
+        searchable
+      />
+    </div>
   )
 }
 
@@ -149,20 +138,13 @@ const Welcome = () => (
 )
 
 export const ChatClient = () => {
-  // Browser SpeechRecognition is client-only; the SSR/first client render
-  // must agree (no mic), so the adapter appears only after hydration.
-  const dictation = useClientValue<DictationAdapter | undefined>(
-    readDictation,
-    undefined
-  )
-
   const runtime = useRemoteThreadListRuntime({
     adapter: threadListAdapter,
     runtimeHook: function useChatThreadRuntime() {
       return useChatRuntime({
         sendAutomaticallyWhen:
           lastAssistantMessageIsCompleteWithApprovalResponses,
-        adapters: { ...(dictation ? { dictation } : {}) },
+        adapters: { dictation: new WebSpeechDictationAdapter() },
       })
     },
   })
