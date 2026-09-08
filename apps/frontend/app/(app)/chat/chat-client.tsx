@@ -19,13 +19,13 @@ import { CHAT_MODELS, DEFAULT_CHAT_MODEL_ID } from "@/lib/chat-models"
 import toolkit from "./toolkit"
 
 const monoEyebrow =
-  "font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-emerald-300/80"
+  "font-mono text-xs font-medium uppercase tracking-[0.14em] text-emerald-300/80"
 
 const TokenUsage = () => {
   const usage = useThreadTokenUsage()
   if (!usage) return null
   return (
-    <span className="rounded-full border border-white/10 px-2.5 py-1 font-mono text-[10px] text-muted-foreground">
+    <span className="rounded-full border border-white/10 px-2.5 py-1 font-mono text-xs text-muted-foreground">
       {(usage.totalTokens ?? 0).toLocaleString()} tokens
     </span>
   )

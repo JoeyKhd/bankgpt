@@ -101,7 +101,7 @@ export const AdminShell = ({ children }: { children: React.ReactNode }) => {
           />
           <div className="flex flex-col">
             <span className="text-sm leading-tight font-semibold">BankGPT</span>
-            <span className="font-mono text-[10px] tracking-[0.14em] text-emerald-300/80 uppercase">
+            <span className="font-mono text-xs tracking-[0.14em] text-emerald-300/80 uppercase">
               Admin console
             </span>
           </div>
@@ -115,7 +115,7 @@ export const AdminShell = ({ children }: { children: React.ReactNode }) => {
             if (items.length === 0) return null
             return (
               <div key={section.label} className="flex flex-col gap-0.5">
-                <span className="px-3 pb-1.5 font-mono text-[10px] font-medium tracking-[0.14em] text-muted-foreground/70 uppercase">
+                <span className="px-3 pb-1.5 font-mono text-xs font-medium tracking-[0.14em] text-muted-foreground/70 uppercase">
                   {section.label}
                 </span>
                 {items.map((item) => {
@@ -159,7 +159,7 @@ export const AdminShell = ({ children }: { children: React.ReactNode }) => {
                 {session.user.email}
               </span>
               {isAdmin && (
-                <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-1.5 py-px text-[10px] font-medium text-emerald-300">
+                <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-1.5 py-px text-xs font-medium text-emerald-300">
                   admin
                 </span>
               )}

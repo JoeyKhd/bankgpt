@@ -20,7 +20,7 @@ export const PageStub = ({ title, description, planned }: PageStubProps) => (
     <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-white/12 bg-card/40 p-6">
       <div className="flex items-center gap-2">
         <ConstructionIcon className="size-4 text-emerald-300" />
-        <span className="font-mono text-[10px] font-medium tracking-[0.14em] text-emerald-300/80 uppercase">
+        <span className="font-mono text-xs font-medium tracking-[0.14em] text-emerald-300/80 uppercase">
           Planned
         </span>
       </div>

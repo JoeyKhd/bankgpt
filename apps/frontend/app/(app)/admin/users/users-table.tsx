@@ -53,10 +53,10 @@ export const UsersTable = ({
     <div className="flex flex-col gap-3">
       <div className="overflow-hidden rounded-2xl border border-white/8">
         <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4 border-b border-white/8 bg-white/[0.02] px-4 py-2.5">
-          <span className="font-mono text-[10px] font-medium tracking-[0.14em] text-muted-foreground/70 uppercase">
+          <span className="font-mono text-xs font-medium tracking-[0.14em] text-muted-foreground/70 uppercase">
             User
           </span>
-          <span className="font-mono text-[10px] font-medium tracking-[0.14em] text-muted-foreground/70 uppercase">
+          <span className="font-mono text-xs font-medium tracking-[0.14em] text-muted-foreground/70 uppercase">
             Role
           </span>
           <span className="w-32" />

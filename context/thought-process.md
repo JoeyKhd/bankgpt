@@ -650,3 +650,19 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   their planned content is listed on each page.
 - **References:** `apps/frontend/app/(app)/admin/`, `lib/auth.ts`,
   `lib/auth-client.ts`, `lib/roles.ts`; D-010, D-022, D-024, D-026.
+
+## D-028 — 2026-09-08T22:33:49Z — Tailwind named font sizes, no arbitrary `text-[Npx]`
+
+- **Status:** accepted
+- **Decision/change:** Replaced all 20 `text-[10px]` arbitrary classes with
+  `text-xs` across the frontend (10 files: chat client/toolkit, admin shell,
+  admin pages, users table, login form, page stub). Recorded the convention
+  in `AGENTS.md` under Code style: use Tailwind's named font-size scale
+  instead of arbitrary pixel sizes.
+- **Why:** Owner direction — arbitrary one-off sizes drift from the design
+  scale; named steps keep typography consistent and greppable.
+- **Consequences/follow-up:** Slight visual change: `text-xs` is 12px with
+  its own line-height vs the old fixed 10px. Accepted by the owner.
+- **References:** `AGENTS.md` (Code style), `apps/frontend/app/(app)/`,
+  `apps/frontend/app/login/`, `apps/frontend/components/admin/`.
+

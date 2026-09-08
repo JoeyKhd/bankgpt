@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: "Overview" }
 export const dynamic = "force-dynamic"
 
 const monoEyebrow =
-  "font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-emerald-300/80"
+  "font-mono text-xs font-medium uppercase tracking-[0.14em] text-emerald-300/80"
 
 const Stat = ({
   label,

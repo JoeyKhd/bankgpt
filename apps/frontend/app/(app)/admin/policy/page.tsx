@@ -4,7 +4,7 @@ import type { Metadata } from "next"
 export const metadata: Metadata = { title: "Safety policy" }
 
 const monoEyebrow =
-  "font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-emerald-300/80"
+  "font-mono text-xs font-medium uppercase tracking-[0.14em] text-emerald-300/80"
 
 const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
   <div className="flex items-start justify-between gap-6 border-b border-white/6 px-4 py-3 last:border-0">

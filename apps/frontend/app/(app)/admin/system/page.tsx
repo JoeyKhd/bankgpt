@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "System" }
 export const dynamic = "force-dynamic"
 
 const monoEyebrow =
-  "font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-emerald-300/80"
+  "font-mono text-xs font-medium uppercase tracking-[0.14em] text-emerald-300/80"
 
 const Row = ({
   label,
@@ -84,7 +84,7 @@ export default function SystemPage() {
                 <>
                   {item.key}
                   {item.required && (
-                    <span className="ml-1.5 text-[10px] text-muted-foreground/60">
+                    <span className="ml-1.5 text-xs text-muted-foreground/60">
                       required
                     </span>
                   )}

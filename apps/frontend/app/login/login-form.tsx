@@ -75,7 +75,7 @@ export const LoginForm = () => {
       >
         {mode === "sign-up" && (
           <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-mono text-[10px] font-medium tracking-[0.14em] text-emerald-300/80 uppercase">
+            <span className="font-mono text-xs font-medium tracking-[0.14em] text-emerald-300/80 uppercase">
               Name
             </span>
             <Input
@@ -87,7 +87,7 @@ export const LoginForm = () => {
           </label>
         )}
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-mono text-[10px] font-medium tracking-[0.14em] text-emerald-300/80 uppercase">
+          <span className="font-mono text-xs font-medium tracking-[0.14em] text-emerald-300/80 uppercase">
             Email
           </span>
           <Input
@@ -100,7 +100,7 @@ export const LoginForm = () => {
           />
         </label>
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-mono text-[10px] font-medium tracking-[0.14em] text-emerald-300/80 uppercase">
+          <span className="font-mono text-xs font-medium tracking-[0.14em] text-emerald-300/80 uppercase">
             Password
           </span>
           <Input

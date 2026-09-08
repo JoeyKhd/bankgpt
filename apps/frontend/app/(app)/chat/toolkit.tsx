@@ -21,7 +21,7 @@ import type {
 import { invokeStubCapability } from "@/lib/capabilities-catalog"
 
 const monoEyebrow =
-  "font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-emerald-300/80"
+  "font-mono text-xs font-medium uppercase tracking-[0.14em] text-emerald-300/80"
 
 const RiskBadge = ({ risk }: { risk: Capability["risk"] }) =>
   risk === "risky" ? (
@@ -48,7 +48,7 @@ const CapabilityCard = ({ capability }: { capability: Capability }) => (
       <span className="text-sm font-semibold text-foreground">
         {capability.name}
       </span>
-      <span className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+      <span className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-xs text-muted-foreground">
         v{capability.version}
       </span>
       <RiskBadge risk={capability.risk} />
@@ -293,7 +293,7 @@ const InvokeCapabilityUI = ({
         <div className="flex items-center gap-3 border-t border-amber-400/15 pt-2 text-[11px] text-muted-foreground/80">
           <span>{result.stepsExecuted} steps</span>
           <span>{(result.durationMs / 1000).toFixed(1)}s replay</span>
-          <span className="rounded-full border border-white/10 px-1.5 py-px font-mono text-[10px]">
+          <span className="rounded-full border border-white/10 px-1.5 py-px font-mono text-xs">
             stub
           </span>
         </div>
@@ -308,10 +308,10 @@ const InvokeCapabilityUI = ({
         <span className="text-sm font-semibold text-emerald-200">
           {result.capabilityName}
         </span>
-        <span className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+        <span className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-xs text-muted-foreground">
           v{result.version}
         </span>
-        <span className="rounded-full border border-white/10 px-1.5 py-px font-mono text-[10px] text-muted-foreground">
+        <span className="rounded-full border border-white/10 px-1.5 py-px font-mono text-xs text-muted-foreground">
           stub
         </span>
       </div>
