@@ -262,6 +262,9 @@ stop and report).
   running them inside `apps/frontend` is equivalent. Run `pnpm format` before
   linting so Prettier-clean files stay clean. There is no test script yet;
   when one is added, it joins this list.
+- **The owner tests manually.** Do not write or run automated browser/E2E
+  tests (Playwright, Cypress, ...) for UI changes unless the owner asks. Ship
+  the change, keep the dev server available, and let the owner verify.
 - **`context/` and `AGENTS.md`:** no checks beyond
   Markdown link/structure sanity and a clean staged diff.
 - If a check cannot pass yet (blocked, half-done, waiting on the user), **say

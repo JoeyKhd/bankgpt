@@ -681,3 +681,51 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** `AGENTS.md` (Code style), `apps/frontend/app/(app)/admin/`,
   `apps/frontend/components/admin/page-stub.tsx`.
 
+## D-030 — 2026-09-08T22:44:10Z — Persistent chat threads, composer model selector, dictation
+
+- **Status:** accepted
+- **Decision/change:** The caller chat is now multi-threaded with SQLite
+  persistence. New `chat_thread` + `chat_message` tables (per user) with
+  `/api/threads` CRUD, message history load/upsert/delete, and title
+  generation (DeepSeek V3.2 low effort via OpenRouter, streamed through
+  assistant-stream). The client uses `useRemoteThreadListRuntime` with
+  `useChatRuntime` as the nested per-thread hook, a module-stable
+  `RemoteThreadListAdapter` in `lib/thread-list-adapter.ts` (history via
+  `withFormat` so the AI SDK storage format keeps reasoning + tool parts),
+  and the registry `thread-list` element in a new sidebar with the Console
+  link pinned bottom-left. Messages persist as encoded UIMessages, so
+  reasoning blocks survive reload (fixes the reasoning-loss report). The
+  model selector moved from the header into the composer next to the
+  attachment button, with single-path provider icons (svgl/simple-icons) and
+  the model/effort choice persisted to localStorage. Voice input uses
+  `WebSpeechDictationAdapter` (Chrome/Safari; mic button hides when
+  unsupported). Also extracted the shared SQLite handle into `lib/db.ts`
+  with WAL + busy_timeout (fixes "database is locked" between dev server and
+  build).
+- **Why:** Owner direction — threads, reasoning persistence, composer model
+  selector like assistant-ui.com, bottom-left console link, easy voice.
+- **Consequences/follow-up:** Threads are per user, scoped by session on
+  every route. Title generation costs one cheap LLM call per thread. No
+  realtime OpenRouter voice yet — dictation transcribes into the composer;
+  realtime speech-to-speech is a separate decision. Existing single-thread
+  chats are not migrated (there was no persistence before).
+- **References:** `apps/frontend/lib/chat-threads.ts`,
+  `apps/frontend/lib/thread-list-adapter.ts`,
+  `apps/frontend/app/api/threads/`,
+  `apps/frontend/app/(app)/chat/chat-client.tsx`,
+  `apps/frontend/components/assistant-ui/elements/thread-list.aui.tsx`,
+  `apps/frontend/components/assistant-ui/elements/model-icons.tsx`,
+  `apps/frontend/lib/db.ts`.
+
+## D-031 — 2026-09-08T22:44:10Z — Owner tests manually; no automated E2E by default
+
+- **Status:** accepted
+- **Decision/change:** Recorded in AGENTS.md (Definition of done): do not
+  write or run automated browser/E2E tests (Playwright etc.) for UI changes
+  unless asked; ship, keep the dev server available, and let the owner
+  verify.
+- **Why:** Owner direction — per-change automated E2E is unwanted overhead.
+- **Consequences/follow-up:** Definition of done stays format + lint +
+  typecheck + build.
+- **References:** `AGENTS.md` (Definition of done).
+

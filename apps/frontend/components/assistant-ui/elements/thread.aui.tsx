@@ -77,6 +77,8 @@ export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart
 export type ThreadComponents = {
   AssistantMessage?: ComponentType | undefined
   Welcome?: ComponentType | undefined
+  /** Extra controls rendered next to the attachment button in the composer. */
+  ComposerLeft?: ComponentType | undefined
   ToolFallback?: ToolCallMessagePartComponent | undefined
   ToolGroup?:
     ComponentType<PropsWithChildren<{ group: ThreadGroupPart }>> | undefined
@@ -296,9 +298,14 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
 }
 
 const ComposerAction: FC = () => {
+  const { ComposerLeft } = useContext(ThreadComponentsContext)
+
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      <ComposerAddAttachment />
+      <div className="flex min-w-0 items-center gap-1.5">
+        <ComposerAddAttachment />
+        {ComposerLeft ? <ComposerLeft /> : null}
+      </div>
       <div className="flex items-center gap-1.5">
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
           <AuiIf condition={(s) => s.composer.dictation == null}>
