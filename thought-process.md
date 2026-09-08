@@ -147,3 +147,29 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   uncommitted work and was not staged with this change.
 - **References:** Project owner's message; `apps/frontend/package.json`;
   `apps/frontend/components.json`; `apps/frontend/AGENTS.md`; D-005.
+
+### D-007 — 2026-09-08T19:59:08Z — Convert to a pnpm workspace monorepo
+
+- **Status:** accepted
+- **Decision/change:** Made the repository a pnpm-workspace monorepo per the
+  owner's request. Root `package.json` (name `interface-ai`,
+  `packageManager: pnpm@10.33.0`) + root `pnpm-workspace.yaml` cover `apps/*`
+  with a single root `pnpm-lock.yaml`; the scaffold's nested
+  `apps/frontend/pnpm-workspace.yaml` and `pnpm-lock.yaml` were removed, and
+  its `allowBuilds` map moved to the root workspace file. Root scripts fan
+  out: `pnpm run dev` starts the frontend via `pnpm --filter frontend run
+  dev`; `build` / `lint` / `typecheck` / `format` run via `pnpm -r
+  --if-present`. Root `.gitignore` now ignores `node_modules/`.
+- **Why:** The owner needs `pnpm run dev` from the workspace root and a
+  monorepo layout for future packages. The scaffold's embedded `.git` (one
+  auto-generated "feat: initial commit", no remote) blocked a normal commit,
+  so it was removed after backing it up to
+  `/tmp/frontend-nested-git-backup.tar.gz`; the scaffold is now tracked in
+  this repo as `ce8bf13`.
+- **Consequences/follow-up:** Verified by execution: `pnpm install` from the
+  root resolves 2 workspace projects with no config warnings; `pnpm run dev`
+  from the root serves Next.js 16.2.6 on :3000 (HTTP 200); root `lint`,
+  `typecheck`, and `build` all pass. `AGENTS.md` package-manager, layout, and
+  definition-of-done sections updated to match.
+- **References:** Project owner's monorepo request; `package.json`;
+  `pnpm-workspace.yaml`; D-006.

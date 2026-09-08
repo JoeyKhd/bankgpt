@@ -57,8 +57,10 @@ twice. Conventions live in the repository, not only in agent memory.
 ## Layout
 
 ```
+package.json            # workspace root; scripts fan out to members
+pnpm-workspace.yaml     # covers apps/*; single root pnpm-lock.yaml
 apps/
-  frontend/             # Next.js 16 + shadcn app (standalone pnpm package)
+  frontend/             # Next.js 16 + shadcn app (workspace member)
 context/                # project knowledge base — research + decisions as markdown
 ```
 
@@ -107,11 +109,16 @@ conventions from the owner's other projects are **not** relevant here.
 
 ## Package manager
 
-- **pnpm only.** Never npm or yarn.
-- `apps/frontend` is a **standalone pnpm package** with its own
-  `pnpm-lock.yaml` and `pnpm-workspace.yaml`; there is no root workspace. Run
-  `pnpm install`, `pnpm dev`, and all scripts from **`apps/frontend`**, not the
-  repo root.
+- **pnpm only.** Never npm or yarn. Pinned via `packageManager` in the root
+  `package.json`.
+- **This is a pnpm-workspace monorepo**: root `package.json` +
+  `pnpm-workspace.yaml` cover `apps/*`, with a single root `pnpm-lock.yaml`.
+  Run `pnpm install` from the **repo root**, never inside an app. Add deps
+  with `pnpm --filter <pkg> add <dep>` (e.g. `pnpm --filter frontend add zod`).
+- **Root scripts fan out to workspace members** (`pnpm -r --if-present`):
+  `pnpm run dev` starts the frontend dev server, and `pnpm run build` /
+  `lint` / `typecheck` / `format` run across all packages that define them.
+  Running the same scripts inside `apps/frontend` also works.
 
 ## Linting and formatting
 
@@ -128,9 +135,11 @@ A change is done only when the relevant checks pass **before** the commit — no
 red output, no skipped steps, no "it was already broken" (if it is, fix it or
 stop and report).
 
-- **`apps/frontend`:** `pnpm lint` (zero errors **and** zero warnings),
-  `pnpm typecheck` (zero errors), `pnpm build` (production build succeeds).
-  There is no test script yet; when one is added, it joins this list.
+- **`apps/frontend`:** from the repo root, `pnpm run lint` (zero errors
+  **and** zero warnings), `pnpm run typecheck` (zero errors), `pnpm run build`
+  (production build succeeds). These fan out via `pnpm -r --if-present`;
+  running them inside `apps/frontend` is equivalent. There is no test script
+  yet; when one is added, it joins this list.
 - **`context/`, `thought-process.md`, and `AGENTS.md`:** no checks beyond
   Markdown link/structure sanity and a clean staged diff.
 - If a check cannot pass yet (blocked, half-done, waiting on the user), **say
