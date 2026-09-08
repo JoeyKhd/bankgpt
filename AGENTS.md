@@ -76,7 +76,7 @@ The frontend was scaffolded from a shadcn template and follows its structure:
 ```
 app/                    # Next.js App Router (layout.tsx, page.tsx, globals.css)
 components/             # React components; components/ui/ = shadcn components
-components/theme-provider.tsx  # next-themes provider (`d` toggles dark/light)
+components/theme-provider.tsx  # next-themes provider (dark-only, no toggle)
 hooks/                  # React hooks
 lib/utils.ts            # cn() re-exported from the `cn` package
 public/
@@ -91,8 +91,9 @@ tokens in [context/design/tokens.json](context/design/tokens.json); source
 assets (logo mark, lockup, favicon, OG reference) are in
 [context/design/assets/](context/design/assets/). Summary:
 
-- **Dark-first.** Brand background `#09090B`; cards `#131316`; hairline
-  borders are white at 6%. Dark mode is the brand-native mode.
+- **Dark-only.** Brand background `#09090B`; cards `#131316`; hairline
+  borders are white at 6%. The app forces the dark theme — no system
+  preference, no light mode, no toggle (D-033).
 - **Two accents:** emerald `#10B981` (primary actions — button text on
   emerald is deep green `#042F23`, never white) and violet `#8B5CF6` /
   indigo `#6366F1`. Signature gradient: `105deg, #6366F1 → #8B5CF6 42% →
@@ -133,8 +134,8 @@ silently expanding scope.
 - `@base-ui/react` — the underlying primitives shadcn components are built on
   here
 - `lucide-react` for icons
-- `next-themes` for dark mode (`ThemeProvider` in `app/layout.tsx`; press `d`
-  outside text inputs to toggle)
+- `next-themes` with a forced dark theme (`ThemeProvider` in
+  `app/layout.tsx`; dark-only, no system preference and no toggle)
 - Path alias: `@/*` → app root (`@/components`, `@/lib/utils`, `@/hooks`)
 - Fonts via `next/font/google`: Geist (`--font-sans`) and Geist Mono
   (`--font-mono`) in `app/layout.tsx`

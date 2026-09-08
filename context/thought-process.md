@@ -755,3 +755,18 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `apps/frontend/app/(app)/chat/chat-client.tsx`,
   `apps/frontend/components/assistant-ui/elements/thread.aui.tsx`.
 
+## D-033 — 2026-09-08T22:51:54Z — Dark theme is forced; no system preference
+
+- **Status:** accepted
+- **Decision/change:** The app is dark-only. `ThemeProvider` now sets
+  `defaultTheme="dark"` + `forcedTheme="dark"` with `enableSystem` removed,
+  and the `d` dark/light hotkey was deleted. AGENTS.md brand + stack notes
+  updated. Also in this change: `cursor-pointer` on command dropdown items
+  (model list), replacing the shadcn `cursor-default`.
+- **Why:** Owner direction — the brand is dark-native; a light mode is not
+  offered and system preference must never light-render the app.
+- **Consequences/follow-up:** Any stale `theme` localStorage value is
+  overridden by `forcedTheme`. Design work only needs dark tokens.
+- **References:** `apps/frontend/components/theme-provider.tsx`,
+  `AGENTS.md`, `apps/frontend/components/ui/command.tsx`.
+
