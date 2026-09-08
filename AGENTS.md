@@ -210,8 +210,10 @@ for frontend work.
   variable is marked REQUIRED or OPTIONAL.
 - **Always create `apps/frontend/.env.local` if it does not exist**, filling
   the required values (`openssl rand -base64 32` for `BETTER_AUTH_SECRET`,
-  `http://localhost:3000` for `BETTER_AUTH_URL`). `.env.local` is gitignored;
-  never commit it.
+  `http://localhost:3000` for `BETTER_AUTH_URL`). Also set
+  `NEXT_PUBLIC_SITE_URL=http://localhost:3000` so SEO metadata (canonical,
+  OG, sitemap) points at localhost in dev instead of the production default.
+  `.env.local` is gitignored; never commit it.
 - After changing auth config or plugins, re-run the schema migration from
   `apps/frontend`: `pnpm dlx @better-auth/cli@latest migrate --config
   lib/auth.ts`.

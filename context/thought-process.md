@@ -468,3 +468,20 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** Project owner's request; D-017, D-019;
   `apps/frontend/app/layout.tsx`; `apps/frontend/app/robots.ts`;
   `apps/frontend/app/sitemap.ts`; `apps/frontend/app/manifest.ts`.
+
+### D-021 — 2026-09-08T21:38:58Z — NEXT_PUBLIC_SITE_URL defaults to localhost in .env.local
+
+- **Status:** accepted
+- **Decision/change:** Added `NEXT_PUBLIC_SITE_URL=http://localhost:3000` to
+  `apps/frontend/.env.local` and extended the AGENTS.md ".env.local"
+  convention to require it. Without it, dev fell back to the code default
+  `https://bankgpt.ai`, so local canonical/OG/sitemap URLs pointed at
+  production.
+- **Why:** Project owner asked whether `NEXT_PUBLIC_SITE_URL` is
+  automatically created for local dev per AGENTS.md — it was not; the
+  convention only covered auth/OpenRouter values.
+- **Consequences/follow-up:** New `.env.local` files get the localhost
+  value from the start; production sets the real URL (or relies on the
+  `https://bankgpt.ai` code default).
+- **References:** Project owner's question; D-020; `AGENTS.md`;
+  `apps/frontend/.env.local`.
