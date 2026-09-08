@@ -866,3 +866,21 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `apps/frontend/lib/chat-threads.ts`,
   `@assistant-ui/core/dist/react/runtimes/RemoteThreadListThreadListRuntimeCore.js`
   (`generateTitle`, ~lines 534–570).
+
+## D-038 — 2026-09-08T23:21:32Z — No automated verification of changes; owner tests everything manually
+
+- **Status:** accepted
+- **Decision/change:** Broadened the AGENTS.md "Definition of done" testing
+  rule from D-031: the ban now covers all automated verification of changes,
+  not just browser/E2E tests for UI changes — no Playwright/Cypress suites
+  and no scripted end-to-end click-throughs against the dev server
+  (curl/API scripts that simulate a user session) unless the owner asks.
+  The pre-commit gate stays format + lint + typecheck + build.
+- **Why:** Owner correction — per-change scripted verification is unwanted
+  overhead and has proven flaky (the Playwright composer race in D-026, and
+  an aborted scripted API-level verification of the title route while
+  landing D-037). The owner tests everything manually for now.
+- **Consequences/follow-up:** Supersedes D-031 with a broader rule. The
+  `playwright` devDependency stays for ad-hoc screenshots only (D-026), not
+  for test suites.
+- **References:** `AGENTS.md` (Definition of done); D-031, D-026.
