@@ -441,3 +441,30 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   it when the app's public pages take shape.
 - **References:** Project owner's request; D-017; `context/design/`;
   `apps/frontend/public/`.
+
+### D-020 — 2026-09-08T21:29:38Z — BankGPT SEO layer: OG image wired, robots/sitemap/manifest, JSON-LD
+
+- **Status:** accepted
+- **Decision/change:** Wired the generated OG image into the app via the
+  `app/opengraph-image.png` + `app/opengraph-image.alt.txt` file conventions
+  (auto-emits `og:image`/`twitter:image` with size, type, alt). Expanded
+  `app/layout.tsx` metadata: `metadataBase` (from `NEXT_PUBLIC_SITE_URL`,
+  default `https://bankgpt.ai`), title template (`%s | BankGPT`), keywords,
+  canonical alternates, Open Graph + Twitter cards, robots directives, and
+  icon set. Added JSON-LD (`Organization` + `WebSite` + `SoftwareApplication`)
+  in the layout body. Added `app/robots.ts` (allow all, disallow `/api/`),
+  `app/sitemap.ts`, and `app/manifest.ts` (brand colors `#09090B`). Replaced
+  the default Vercel `app/favicon.ico` with a multi-size BankGPT-mark ICO
+  rendered from the brand favicon. SEO copy follows the BankGPT voice from
+  `context/design/DESIGN.md`.
+- **Why:** Project owner asked to wire the OG image into metadata and create
+  proper SEO based on BankGPT.
+- **Consequences/follow-up:** `NEXT_PUBLIC_SITE_URL` (optional, defaults to
+  https://bankgpt.ai) added to `.env.example` per the env-var convention.
+  Verified rendered head tags, robots.txt, sitemap.xml, and
+  manifest.webmanifest on a dev server. When real pages ship, each should
+  export its own `metadata` (title/description) — the `%s | BankGPT`
+  template applies automatically.
+- **References:** Project owner's request; D-017, D-019;
+  `apps/frontend/app/layout.tsx`; `apps/frontend/app/robots.ts`;
+  `apps/frontend/app/sitemap.ts`; `apps/frontend/app/manifest.ts`.
