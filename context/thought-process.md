@@ -1026,3 +1026,62 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   documented as a cut for production.
 - **References:** D-023 (transport was the open question); assignment §3.5
   (escalation), §4 (architecture is our call).
+
+### D-042 — 2026-09-08T23:49:32Z — Mock bank "FinCore Teller" built at apps/mockbank
+
+- **Status:** accepted (implements D-040)
+- **Decision/change:** Built the proxy target at `apps/mockbank`: zero-dep
+  Node `node:http` server-rendered teller console (port 4010, localhost),
+  implementing the three stub-catalog workflows — member search → detail →
+  balances; open sub-account (form → review with a native `window.confirm`
+  + checkbox → confirmation with `?c=CNF-####`); freeze card (reason select
+  → Frozen). 7 deterministic seed members; `POST /__reset__` reseeds and
+  clears sessions. Deliberate hostility per D-040: nested-table layouts, no
+  ids/data-*/test-ids (real `<button>/<a>/<input>/<select>/<label>` so a11y
+  locators work), 50–400 ms latency (1–2 s search), a per-session
+  every-7th-GET transient 500, and 5-minute inactivity session expiry.
+- **Why:** Gives the engine a safe, reproducible target that exercises the
+  exact exceptional states the replay error taxonomy must handle, with no
+  terms/PII exposure.
+- **Consequences/follow-up:** Scripts are only `dev`/`start` — deliberate
+  demo infrastructure (a documented cut for REPORT.md). Full decision list
+  in `apps/mockbank/NOTES.md`.
+- **References:** `apps/mockbank/README.md`, `apps/mockbank/NOTES.md`; D-040.
+
+### D-043 — 2026-09-08T23:49:32Z — Engine core: discovery loop, artifact schema, deterministic replay
+
+- **Status:** accepted (implements D-039; D-041 partial — HTTP+WS server built)
+- **Decision/change:** Built `apps/engine`: (1) genuine observe → decide →
+  act discovery loop — Playwright `page.ariaSnapshot()` + screenshot → one
+  structured model call per step (AI SDK v7 `generateText` + `Output.object`,
+  zod action schema) → Playwright `getByRole` — with goal-met / stuck /
+  max-steps / timeout stops, then a distillation call that emits the
+  artifact; (2) the capability artifact schema (`src/artifact.ts`, zod v4,
+  `z.infer` types): strategy-tagged locators (a11y role+name primary, css/
+  text fallbacks, robustness note), typed inputs/outputs, ordered steps,
+  machine-checkable checkpoint, `businessOutcomes` detect table; (3)
+  deterministic replay with zero model calls, locator fallback order,
+  `{{input}}` substitution, output extraction, business-outcome +
+  checkpoint verification, result taxonomy success | business_outcome |
+  recoverable | hard_failure (`src/results.ts`); (4) policy — URL + action
+  allowlists enforced in discovery and replay, approval-token seam for
+  risky actions, redaction of secret/PII-shaped values; (5) evidence —
+  per-step JSONL, failure screenshot + aria snapshot, full transcript, all
+  redacted; (6) SQLite storage (better-sqlite3, WAL); (7) HTTP API + WS
+  control channel with a session registry + control state machine
+  (`src/session.ts`); (8) CLI `discover` / `replay` (README demo path).
+  Discovery model: `google/gemini-2.5-flash` via OpenRouter (vision +
+  structured output).
+- **Why:** This is the graded core of the assignment — a real LLM-driven
+  run distilled into a typed, reviewable artifact that replays with no
+  model in the loop.
+- **Consequences/follow-up:** Verified genuine runs recorded in
+  `apps/engine/evidence/` (fixture discovery + artifact, happy-path replay,
+  member-not-found business outcome); graded runs against finished mockbank
+  happen at integration. Open issues deferred to the console phase:
+  approval tokens not yet scoped per run; discovery runs not yet on
+  LiveSession / WS-streamed; engine DB path should be set explicitly by the
+  frontend (`ENGINE_DB_PATH`/`ENGINE_EVIDENCE_DIR`); `ENGINE_URL` env name
+  owed to `apps/frontend/.env.example`.
+- **References:** `apps/engine/README.md`, `apps/engine/NOTES.md`; D-039,
+  D-041, D-023.
