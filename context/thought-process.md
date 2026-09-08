@@ -485,3 +485,26 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `https://bankgpt.ai` code default).
 - **References:** Project owner's question; D-020; `AGENTS.md`;
   `apps/frontend/.env.local`.
+
+### D-022 — 2026-09-08T21:42:23Z — Admin area at `/admin`; first registered user is always an admin
+
+- **Status:** accepted
+- **Decision/change:** The app gets two roles: `admin` and `operator`
+  (default). The first user to register is always an admin; later signups
+  are operators; admins can promote others. Management and configuration
+  surfaces live under an admin-only `/admin` section (planned: users, safety
+  policy, system status), guarded server-side. The day-to-day operator
+  product (dashboard, discover, capabilities, runs, interventions) stays
+  top-level and is available to every signed-in user.
+- **Why:** Project owner direction. Some surfaces (user management, safety
+  policy) are administrative and should not be reachable by every operator.
+  The first-user rule removes any bootstrap or seed problem: whoever deploys
+  and signs up first owns the instance.
+- **Consequences/follow-up:** Supersedes the earlier discussion proposal of
+  a single full-access role. Implementation mechanics (role storage,
+  first-user detection, better-auth `admin` plugin vs. `additionalFields` +
+  database hook, `/admin` layout guard) are to be verified against the
+  installed better-auth version when built. The overall page map is still
+  being finalized in discussion; this entry fixes the role rule and the
+  `/admin` boundary only.
+- **References:** Project owner's message; D-010 (better-auth adoption).
