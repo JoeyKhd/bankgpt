@@ -231,3 +231,19 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `y` confirmation when run manually.
 - **References:** Project owner's request; better-auth docs (basic-usage,
   adapters/sqlite, integrations/next); `apps/frontend/.gitignore`; D-009.
+
+### D-011 — 2026-09-08T20:48:34Z — Standardize local env setup
+
+- **Status:** accepted
+- **Decision/change:** Two related conventions per the owner. (1) Agents must
+  create `apps/frontend/.env.local` whenever it is missing, filling correct
+  values (generated `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` for dev).
+  (2) `apps/frontend/.env.example` now marks each variable REQUIRED or
+  OPTIONAL (`BETTER_AUTH_SECRET` required; `BETTER_AUTH_URL`, `DATABASE_URL`
+  optional).
+- **Why:** The owner asked for both, so a fresh checkout or session always has
+  working local auth config without committing secrets.
+- **Consequences/follow-up:** `.env.local` is gitignored (verified with `git
+  check-ignore`) and was created in this change with a generated secret;
+  `.env.example` remains the committed, value-free reference.
+- **References:** Project owner's request; `apps/frontend/.env.example`; D-010.

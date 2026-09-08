@@ -149,8 +149,13 @@ here.
   and **must stay gitignored** — `data/.gitignore` ignores all contents, and
   `.gitignore` also ignores `/data/*.sqlite` + journal/wal/shm sidecars.
   Commit only the schema and `.env.example`, never the database file.
-- Env vars: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, optional `DATABASE_URL` —
-  names only in `apps/frontend/.env.example`.
+- Env vars: `BETTER_AUTH_SECRET` (required), `BETTER_AUTH_URL` and
+  `DATABASE_URL` (optional) — names only in `apps/frontend/.env.example`,
+  where each variable is marked REQUIRED or OPTIONAL.
+- **Always create `apps/frontend/.env.local` if it does not exist**, filling
+  the required values (`openssl rand -base64 32` for `BETTER_AUTH_SECRET`,
+  `http://localhost:3000` for `BETTER_AUTH_URL`). `.env.local` is gitignored;
+  never commit it.
 - After changing auth config or plugins, re-run the schema migration from
   `apps/frontend`: `pnpm dlx @better-auth/cli@latest migrate --config
   lib/auth.ts`.
