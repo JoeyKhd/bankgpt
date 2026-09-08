@@ -548,3 +548,70 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   operator product at top-level routes and only management under `/admin`.
   The role rule from D-022 (first registered user is admin) is unchanged.
 - **References:** Project owner's message; D-022.
+
+### D-025 — 2026-09-08T21:49:05Z — Caller-simulation chat at `/chat` via assistant-ui
+
+- **Status:** accepted
+- **Decision/change:** The app includes a caller-side chat surface at
+  `/chat`, built with assistant-ui on the AI SDK v7 + OpenRouter stack,
+  with streaming, tool calls, and selectable models. It simulates the
+  calling AI agent (the BankGPT-style agent-facing product, out of scope
+  to build for real). Its tool surface is capability invocation only:
+  `list_capabilities` and `invoke_capability` (stretch goal #1), never raw
+  UI actions against the target application. Rendering the system's own
+  discovery transcript (a separate, read-only use of assistant-ui at
+  `/admin/discover/[runId]`) remains a later decision.
+- **Why:** Project owner direction. The assignment's actor #1 (the calling
+  AI agent that supplies goals and invokes capabilities) must be visible in
+  the demo or the "agent-invocable capability" story is only a claim in
+  REPORT.md. The chat LLM decides *what*; the engine decides *how* — the
+  model must never drive the target UI directly or the demo undermines
+  itself.
+- **Consequences/follow-up:** Until the engine persists real capabilities,
+  the tools run against a clearly-labeled stub catalog. When `apps/engine`
+  lands, the same tool handlers switch to real storage. `/chat` requires
+  authentication.
+- **References:** Project owner's messages; D-013 (AI SDK + OpenRouter),
+  D-014 (assistant-ui), D-023 (engine), assignment stretch goal #1.
+
+### D-026 — 2026-09-08T22:17:02Z — `/chat` caller simulation: assistant-ui + AI SDK v7 + OpenRouter
+
+- **Status:** accepted
+- **Decision/change:** Implemented the caller-simulation chat (D-025).
+  Auth-gated via a new `(app)` route group (`/login` public, sign-in/up
+  with better-auth; `/` redirects by session). Route
+  `app/api/chat/route.ts` streams `streamText` over OpenRouter
+  (`createOpenRouter()`), multi-step (`stepCountIs(8)`),
+  `sendReasoning: true`, token-usage + model-id `messageMetadata`, and an
+  AI SDK `toolApproval` gate that forces human approval for `risky`
+  capabilities. Tools are a `"use generative"` toolkit compiled by
+  `withAui` from `@assistant-ui/next`: `list_capabilities` and
+  `invoke_capability` against a clearly-labeled stub catalog
+  (`lib/capabilities-catalog.ts`, the contract the engine will honor),
+  each with a BankGPT-styled render; invocation UI covers approval /
+  denied / running / success / business-outcome / hard-failure. Model
+  picker (`model-selector` element) offers six verified tool+reasoning
+  models; the route validates the client-sent `config.modelName` against
+  `lib/chat-models.ts` and applies `config.reasoningEffort` via
+  `extraBody`. Client: `useChatRuntime` with
+  `sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses`,
+  suggestions, branded welcome, token-usage pill.
+- **Why:** Owner direction (D-025). Every API was verified against the
+  installed packages' docs/types (ai 7.0.94, @assistant-ui/react 0.15.18,
+  @assistant-ui/ai-sdk 0.0.4, @openrouter/ai-sdk-provider 3.0.0).
+- **Consequences/follow-up:** Server-verified over SSE: streaming text,
+  list_capabilities call+result, approval-request emission for a risky
+  capability, business-outcome path. Fixed two real bugs found in
+  verification: toolkit renders must tolerate null/partial streaming args
+  (args are null until input streams in), and the invoke render needs
+  `display: "standalone"` so gates never collapse into the tool group.
+  The playwright clickthrough raced the assistant-ui composer (Enter is a
+  newline while a run streams) — flaky as a script, abandoned per owner;
+  manual test steps handed to the owner instead. `playwright` added as a
+  devDependency for ad-hoc screenshots. `components/assistant-ui/elements/`
+  are owned copies: fixed the generated `useShallowStable` ref-in-render
+  (rewrote with the set-state-during-render pattern) and aliased the local
+  `Image` element vs `next/image` with justified `<img>` lint suppressions.
+- **References:** `apps/frontend/app/(app)/chat/`, `app/api/chat/route.ts`,
+  `lib/capabilities-catalog.ts`, `lib/chat-models.ts`; D-013, D-014, D-025;
+  assistant-ui skills (setup/tools/elements).

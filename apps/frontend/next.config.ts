@@ -1,5 +1,6 @@
 import type { NextConfig } from "next"
+import { withAui } from "@assistant-ui/next"
 
 const nextConfig: NextConfig = {}
 
-export default nextConfig
+export default withAui(nextConfig)
