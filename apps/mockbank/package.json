@@ -1,0 +1,11 @@
+{
+  "name": "mockbank",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "FinCore Teller (proxy) - deliberately hostile zero-dependency mock back-office banking app; local automation target for the computer-use engine (D-040).",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "node src/server.js"
+  }
+}
