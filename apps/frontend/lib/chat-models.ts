@@ -5,7 +5,7 @@
 // model here is the only change needed to offer it in the UI.
 
 export type ChatModel = {
-  /** OpenRouter model id, e.g. "anthropic/claude-sonnet-4.6". */
+  /** OpenRouter model id, e.g. "anthropic/claude-sonnet-4.6:nitro". */
   id: string
   /** Short display name. */
   name: string
@@ -13,41 +13,41 @@ export type ChatModel = {
   description: string
 }
 
+// Every id carries the `:nitro` routing variant — OpenRouter's throughput-sort
+// shortcut, equivalent to `provider.sort: "throughput"`. Requests always land
+// on the fastest live provider for the model, trading price for TPS (e.g.
+// gpt-oss-120b nitro → Cerebras ~760 tok/s at ~$0.15/M in vs ~$0.037/M
+// cheapest). Keep the suffix in sync across all entries.
 export const CHAT_MODELS: readonly ChatModel[] = [
   {
-    id: "openai/gpt-oss-120b",
+    id: "openai/gpt-oss-120b:nitro",
     name: "GPT-OSS 120B",
     description: "OpenAI — open-weight reasoning model, ultra-low cost",
   },
   {
-    id: "anthropic/claude-sonnet-4.6",
+    id: "anthropic/claude-sonnet-4.6:nitro",
     name: "Claude Sonnet 4.6",
     description: "Anthropic — balanced all-rounder, strong tool use",
   },
   {
-    id: "anthropic/claude-opus-4.8",
-    name: "Claude Opus 4.8",
-    description: "Anthropic — deepest reasoning, highest cost",
+    id: "openai/gpt-oss-20b:nitro",
+    name: "GPT-OSS 20B",
+    description: "OpenAI — tiny open-weight model, fastest and cheapest",
   },
   {
-    id: "openai/gpt-5.4",
-    name: "GPT-5.4",
-    description: "OpenAI — frontier general-purpose model",
+    id: "z-ai/glm-5.3-flash:nitro",
+    name: "GLM 5.3 Flash",
+    description: "Z.AI — fast open model, top-ranked tool calling",
   },
   {
-    id: "google/gemini-3.1-pro-preview",
-    name: "Gemini 3.1 Pro",
-    description: "Google — long context, strong multimodal",
+    id: "deepseek/deepseek-v4-flash:nitro",
+    name: "DeepSeek V4 Flash",
+    description: "DeepSeek — fast low-cost open model, 1M context",
   },
   {
-    id: "x-ai/grok-4.6",
-    name: "Grok 4.6",
-    description: "xAI — fast frontier model",
-  },
-  {
-    id: "deepseek/deepseek-v3.2",
-    name: "DeepSeek V3.2",
-    description: "DeepSeek — low-cost open model",
+    id: "anthropic/claude-haiku-4.5:nitro",
+    name: "Claude Haiku 4.5",
+    description: "Anthropic — fastest Claude, reliable tool use",
   },
 ] as const
 

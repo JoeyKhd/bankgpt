@@ -24,6 +24,7 @@ import {
   GeminiIcon,
   OpenAIIcon,
   XAIIcon,
+  ZAIIcon,
 } from "@/components/assistant-ui/elements/model-icons"
 import { CHAT_MODELS, DEFAULT_CHAT_MODEL_ID } from "@/lib/chat-models"
 import { threadListAdapter } from "@/lib/thread-list-adapter"
@@ -40,6 +41,7 @@ const PROVIDER_ICONS: Record<string, ComponentType> = {
   google: GeminiIcon,
   "x-ai": XAIIcon,
   deepseek: DeepSeekIcon,
+  "z-ai": ZAIIcon,
 }
 
 const MODEL_OPTIONS = CHAT_MODELS.map((model) => {

@@ -812,3 +812,34 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `apps/frontend/app/(app)/chat/chat-client.tsx` (`PROVIDER_ICONS`),
   `apps/frontend/components/assistant-ui/elements/model-icons.tsx`.
 
+## D-036 — 2026-09-08T23:12:36Z — Chat catalog rebuilt for speed + tool calling; `:nitro` routing everywhere
+
+- **Status:** accepted
+- **Decision/change:** Rebuilt the chat model catalog per owner direction:
+  removed Claude Opus 4.8, GPT-5.4, Gemini 3.1 Pro, Grok 4.6, and DeepSeek
+  V3.2; added Claude Haiku 4.5, GPT-OSS 20B, GLM 5.3 Flash, and DeepSeek V4
+  Flash (dated stable id `deepseek/deepseek-v4-flash`, canonical
+  `…-20260423` — chosen over the `~…-latest` moving alias and the
+  `vision-exp` variant). GPT-OSS 120B stays the default. Every catalog id now
+  carries the `:nitro` variant, OpenRouter's throughput-sort routing shortcut
+  (equivalent to `provider.sort: "throughput"`), so requests always land on
+  the fastest live provider. Added a `ZAIIcon` (lobe-icons single-path mark,
+  currentColor) and mapped the `z-ai` provider slug in the selector.
+- **Why:** Owner wants high TPS and reliable tool calling. Verified against
+  the live OpenRouter catalog and endpoints APIs on 2026-09-08: all six
+  entries support `tools` + `reasoning`; gpt-oss-120b nitro routes to
+  Cerebras (~760 tok/s p50), gpt-oss-20b to Groq (~442 tok/s), GLM 5.3 Flash
+  has tools on 24/24 providers and tops public function-calling boards.
+- **Consequences/follow-up:** `:nitro` trades price for speed — e.g.
+  gpt-oss-120b's fastest provider costs ~$0.15/M in vs ~$0.037/M cheapest.
+  The picker displays model names only; the suffix is invisible in the UI.
+  gpt-oss-20b has tools on only 8/13 providers, but nitro routing plus
+  OpenRouter's `require_parameters` default keeps tool requests on capable
+  endpoints. Existing users keep localStorage-stored (old, now invalid)
+  model ids until they reselect — `readStoredModel` falls back to the new
+  default when the stored id is no longer in the catalog.
+- **References:** `apps/frontend/lib/chat-models.ts`,
+  `apps/frontend/app/(app)/chat/chat-client.tsx`,
+  `apps/frontend/components/assistant-ui/elements/model-icons.tsx`,
+  <https://openrouter.ai/announcements/introducing-nitro-and-floor-price-shortcuts>.
+
