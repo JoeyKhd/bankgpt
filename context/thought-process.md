@@ -791,3 +791,24 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** `apps/frontend/app/(app)/chat/chat-client.tsx`,
   `apps/frontend/hooks/use-mounted.ts`.
 
+## D-035 — 2026-09-08T23:06:08Z — GPT-OSS 120B added as the default chat model
+
+- **Status:** accepted
+- **Decision/change:** Added `openai/gpt-oss-120b` ("GPT-OSS 120B") to the
+  chat model catalog as the first entry, which makes it the default for new
+  chats and the server-side fallback
+  (`DEFAULT_CHAT_MODEL_ID = CHAT_MODELS[0].id`). Claude Sonnet 4.6's
+  "balanced default" description was reworded since it is no longer the
+  default. The picker logo needed no new asset: the selector maps the
+  `openai` provider slug to the existing `OpenAIIcon`, and gpt-oss has no
+  distinct brand mark — OpenAI uses the standard OpenAI logo for it.
+- **Why:** Owner request — offer OpenAI's open-weight 120B model, make it
+  the default, and show its logo.
+- **Consequences/follow-up:** Verified against the live OpenRouter catalog
+  on 2026-09-08: `openai/gpt-oss-120b` supports `tools`, `reasoning`, and
+  `reasoning_effort`. Existing users keep their localStorage-stored model;
+  the new default applies only when no valid stored choice exists.
+- **References:** `apps/frontend/lib/chat-models.ts`,
+  `apps/frontend/app/(app)/chat/chat-client.tsx` (`PROVIDER_ICONS`),
+  `apps/frontend/components/assistant-ui/elements/model-icons.tsx`.
+

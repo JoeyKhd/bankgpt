@@ -15,9 +15,14 @@ export type ChatModel = {
 
 export const CHAT_MODELS: readonly ChatModel[] = [
   {
+    id: "openai/gpt-oss-120b",
+    name: "GPT-OSS 120B",
+    description: "OpenAI — open-weight reasoning model, ultra-low cost",
+  },
+  {
     id: "anthropic/claude-sonnet-4.6",
     name: "Claude Sonnet 4.6",
-    description: "Anthropic — balanced default, strong tool use",
+    description: "Anthropic — balanced all-rounder, strong tool use",
   },
   {
     id: "anthropic/claude-opus-4.8",
@@ -46,6 +51,7 @@ export const CHAT_MODELS: readonly ChatModel[] = [
   },
 ] as const
 
+// The first catalog entry is the default for new chats and server-side fallback.
 export const DEFAULT_CHAT_MODEL_ID = CHAT_MODELS[0].id
 
 export const isChatModelId = (id: string | undefined): id is string =>
