@@ -508,3 +508,43 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   being finalized in discussion; this entry fixes the role rule and the
   `/admin` boundary only.
 - **References:** Project owner's message; D-010 (better-auth adoption).
+
+### D-023 — 2026-09-08T21:46:54Z — Automation engine lives in `apps/engine`
+
+- **Status:** accepted
+- **Decision/change:** The automation engine runs as its own TypeScript
+  service in `apps/engine` (pnpm workspace member, ESM, strict tsc to
+  `dist/`, tsx for dev, flat ESLint via typescript-eslint, Prettier matching
+  repo style). Scaffolded with tooling only — no computer-use stack, LLM
+  wiring, or frontend ↔ engine transport chosen yet. `esbuild` added to root
+  `allowBuilds` (tsx dependency). AGENTS.md layout updated.
+- **Why:** Project owner direction: the engine must not run inside the
+  Next.js server. Long-running browser automation sessions and human
+  handoff cannot be tied to web request lifecycles, and a separate process
+  keeps the control channel (pause/cede/resume) explicit.
+- **Consequences/follow-up:** Verified: root `format`, `lint`, `typecheck`,
+  `build` all pass across 3 workspace projects; engine entrypoint runs
+  under tsx; `dist/` gitignored. Open design questions now: the engine's
+  computer-use stack (Playwright/a11y/CUA) and how the frontend and engine
+  talk (shared SQLite vs. HTTP/WS control channel) — both await owner
+  direction.
+- **References:** Project owner's message; `apps/engine/`; D-007
+  (workspace), D-022.
+
+### D-024 — 2026-09-08T21:46:54Z — Whole authenticated app is the admin console at `/admin`
+
+- **Status:** accepted
+- **Decision/change:** All authenticated functionality — dashboard,
+  discovery, capabilities, replay, runs, interventions — lives under
+  `/admin` as one operator console. Inside it, management sections (users,
+  safety policy, system status) additionally require the `admin` role;
+  operators can use the rest. `/` redirects to `/admin` (signed in) or
+  `/login` (signed out).
+- **Why:** Project owner direction: everything should be viewable and
+  doable from the admin panel. This is an internal operator console, not a
+  consumer product, so one guarded section with role-gated sub-areas is
+  simpler than splitting product vs. admin surfaces.
+- **Consequences/follow-up:** Partially supersedes D-022, which had the
+  operator product at top-level routes and only management under `/admin`.
+  The role rule from D-022 (first registered user is admin) is unchanged.
+- **References:** Project owner's message; D-022.

@@ -61,8 +61,15 @@ package.json            # workspace root; scripts fan out to members
 pnpm-workspace.yaml     # covers apps/*; single root pnpm-lock.yaml
 apps/
   frontend/             # Next.js 16 + shadcn app (workspace member)
+  engine/               # automation engine service (TypeScript, ESM, tsc + tsx)
 context/                # project knowledge base — research + decisions as markdown
 ```
+
+The engine is a standalone TypeScript service (`pnpm --filter engine dev` runs
+it with tsx; `build` compiles with tsc to `dist/`). It owns discovery runs,
+replay, and the live-session control channel. Its computer-use stack and the
+frontend ↔ engine transport are **not chosen yet** — wait for the owner's
+direction before adding automation dependencies there.
 
 The frontend was scaffolded from a shadcn template and follows its structure:
 
