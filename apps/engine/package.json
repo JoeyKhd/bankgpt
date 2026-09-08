@@ -8,9 +8,12 @@
     "build": "tsc -p tsconfig.json",
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,js}\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "discover": "node --env-file=.env.local --import tsx src/cli.ts discover",
+    "replay": "node --env-file=.env.local --import tsx src/cli.ts replay"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.20.1",
     "@types/ws": "^8.18.1",
     "eslint": "^9.39.5",
