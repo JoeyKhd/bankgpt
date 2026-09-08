@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Inter:ital,opsz,wght@0,14..32,400..700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #09090B;
+    --text: #FAFAFA;
+    --text-dim: #A1A1AA;
+    --text-muted: #71717A;
+    --indigo: #6366F1;
+    --violet: #8B5CF6;
+    --emerald: #059669;
+    --emerald-bright: #10B981;
+    --emerald-soft: #34D399;
+    --gradient: linear-gradient(105deg, #6366F1 0%, #8B5CF6 42%, #10B981 100%);
+  }
+  body {
+    width: 1200px; height: 630px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    position: relative;
+    overflow: hidden;
+    padding: 72px;
+    display: flex;
+    flex-direction: column;
+  }
+  /* ambient brand glows */
+  .glow-indigo {
+    position: absolute; top: -260px; left: -200px;
+    width: 720px; height: 720px; border-radius: 50%;
+    background: radial-gradient(circle, #6366F130 0%, transparent 65%);
+  }
+  .glow-emerald {
+    position: absolute; bottom: -320px; right: -220px;
+    width: 820px; height: 820px; border-radius: 50%;
+    background: radial-gradient(circle, #10B98126 0%, transparent 65%);
+  }
+  .logo { display: flex; align-items: center; gap: 18px; }
+  .logo svg { width: 72px; height: 44px; }
+  .logo span { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; }
+  .badge {
+    margin-top: 66px;
+    display: inline-flex; align-items: center; gap: 12px;
+    align-self: flex-start;
+    border: 1px solid #FFFFFF1F;
+    background: #FFFFFF08;
+    border-radius: 100px;
+    padding: 12px 22px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 15px; font-weight: 500;
+    letter-spacing: 0.14em;
+    color: var(--emerald-soft);
+    text-transform: uppercase;
+  }
+  .badge .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--emerald-bright); }
+  h1 {
+    margin-top: 34px;
+    font-size: 68px;
+    font-weight: 600;
+    line-height: 1.12;
+    letter-spacing: -0.035em;
+    max-width: 980px;
+  }
+  h1 em {
+    background: var(--gradient);
+    -webkit-text-fill-color: transparent;
+    -webkit-background-clip: text;
+    background-clip: text;
+    font-style: normal;
+  }
+  p.sub {
+    margin-top: 30px;
+    font-size: 23px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    max-width: 880px;
+  }
+</style>
+</head>
+<body>
+  <div class="glow-indigo"></div>
+  <div class="glow-emerald"></div>
+  <div class="logo">
+    <svg viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="34" cy="30" r="24" fill="#8B5CF6" opacity="0.85"/>
+      <circle cx="62" cy="30" r="24" fill="#10B981"/>
+    </svg>
+    <span>BankGPT</span>
+  </div>
+  <div class="badge"><span class="dot"></span>Personal Financial Intelligence</div>
+  <h1>The private <em>wealth advisor</em> every American can finally afford.</h1>
+  <p class="sub">An AI that sees all your money, understands what it means, and acts on your behalf to make you wealthier.</p>
+</body>
+</html>
