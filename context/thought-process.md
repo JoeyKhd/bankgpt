@@ -770,3 +770,24 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** `apps/frontend/components/theme-provider.tsx`,
   `AGENTS.md`, `apps/frontend/components/ui/command.tsx`.
 
+## D-034 — 2026-09-08T23:03:21Z — Mount-gate the selector; no server/client value branches
+
+- **Status:** accepted (supersedes part of D-032)
+- **Decision/change:** Fixed the lingering hydration error on `/chat`.
+  D-032's `useState(typeof window !== "undefined" ? readStored : default)`
+  lazy initializer is itself a server/client render branch — SSR rendered
+  the default model (Claude) while the client's first render used the
+  stored one (Gemini), so React flagged a mismatch. The model selector now
+  renders a fixed-size placeholder during SSR and the first client render
+  (identical markup) and swaps in the real selector only after mount, so
+  `localStorage` is read solely on the post-hydration pass. Verified with a
+  production SSR render (seeded storage) — no hydration error.
+- **Why:** Owner reported the hydration error.
+- **Consequences/follow-up:** Hard rule for this codebase: never branch a
+  render on `typeof window`/`localStorage` between SSR and first client
+  render — not even in a `useState` initializer. Client-only values go
+  behind the `useMounted` gate (placeholder or CSS-invisible wrapper) and
+  are read only after mount.
+- **References:** `apps/frontend/app/(app)/chat/chat-client.tsx`,
+  `apps/frontend/hooks/use-mounted.ts`.
+

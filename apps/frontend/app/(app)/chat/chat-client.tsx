@@ -56,14 +56,19 @@ const MODEL_OPTIONS = CHAT_MODELS.map((model) => {
 const MODEL_STORAGE_KEY = "bankgpt.chat.model"
 const EFFORT_STORAGE_KEY = "bankgpt.chat.effort"
 
-// Client-only values (localStorage, browser APIs) must not influence SSR or
-// the first client render: they are read lazily on the client-only render
-// pass and revealed through a CSS visibility gate, which avoids a hydration
-// mismatch that would poison client state for the rest of the session.
-const isClient = typeof window !== "undefined"
+// Model + effort picker rendered inside the composer, next to attachments.
+// The wrapper renders a zero-size placeholder during SSR and the first client
+// render (identical markup), then swaps in the real selector after mount, so
+// localStorage is only ever read on the post-hydration render — never on the
+// SSR/first-client pass. That keeps hydration clean; anything that reads
+// client-only values must stay behind this gate.
+const ComposerModelSelector = () => {
+  const mounted = useMounted()
+  if (!mounted) return <span className="inline-block size-7" aria-hidden />
+  return <ComposerModelSelectorInner />
+}
 
 const readStoredModel = () => {
-  if (!isClient) return DEFAULT_CHAT_MODEL_ID
   const stored = localStorage.getItem(MODEL_STORAGE_KEY)
   return stored && MODEL_OPTIONS.some((m) => m.id === stored)
     ? stored
@@ -71,42 +76,34 @@ const readStoredModel = () => {
 }
 
 const readStoredEffort = () => {
-  if (!isClient) return "low"
   const stored = localStorage.getItem(EFFORT_STORAGE_KEY)
   return stored === "low" || stored === "medium" || stored === "high"
     ? stored
     : "low"
 }
 
-// Model + effort picker rendered inside the composer, next to attachments.
-// The selection registers itself with the thread's model context; the last
-// choice is restored from localStorage. Kept hidden (but mounted) until after
-// hydration so SSR and the first client render agree.
-const ComposerModelSelector = () => {
+const ComposerModelSelectorInner = () => {
   const [model, setModel] = useState<string>(readStoredModel)
   const [effort, setEffort] = useState<string>(readStoredEffort)
-  const mounted = useMounted()
 
   return (
-    <div className={mounted ? "contents" : "invisible"}>
-      <ModelSelector
-        models={MODEL_OPTIONS}
-        value={model}
-        onValueChange={(next) => {
-          setModel(next)
-          localStorage.setItem(MODEL_STORAGE_KEY, next)
-        }}
-        effort={effort}
-        onEffortChange={(next) => {
-          setEffort(next)
-          localStorage.setItem(EFFORT_STORAGE_KEY, next)
-        }}
-        variant="ghost"
-        size="sm"
-        className="rounded-full"
-        searchable
-      />
-    </div>
+    <ModelSelector
+      models={MODEL_OPTIONS}
+      value={model}
+      onValueChange={(next) => {
+        setModel(next)
+        localStorage.setItem(MODEL_STORAGE_KEY, next)
+      }}
+      effort={effort}
+      onEffortChange={(next) => {
+        setEffort(next)
+        localStorage.setItem(EFFORT_STORAGE_KEY, next)
+      }}
+      variant="ghost"
+      size="sm"
+      className="rounded-full"
+      searchable
+    />
   )
 }
 
