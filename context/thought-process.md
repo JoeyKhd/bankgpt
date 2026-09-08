@@ -278,3 +278,28 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   from interface.ai remains open; `extract-design-system` is ready for it.
 - **References:** Project owner's request; `skills-lock.json`;
   `AGENTS.md` ## Skills; skills.sh leaderboard (2026-09-08).
+
+### D-013 — 2026-09-08T21:00:30Z — Adopt the Vercel AI SDK with OpenRouter as the must-use LLM stack
+
+- **Status:** accepted
+- **Decision/change:** Per the project owner, all LLM access goes through the
+  Vercel AI SDK (`ai` v7) with OpenRouter as the provider. Installed `ai` and
+  `@openrouter/ai-sdk-provider` v3 (peer-compatible with zod v4) in
+  `apps/frontend`; added `OPENROUTER_API_KEY` (names only) to
+  `.env.example` as REQUIRED for AI features and a value-free placeholder to
+  `.env.local`. Documented the must-use convention in `AGENTS.md`
+  (`createOpenRouter()`, env-based key, no direct provider SDKs without owner
+  approval). Installed the official `ai-sdk` skill (vercel/ai) and
+  `openrouter-models` skill (openrouterteam/skills, official OpenRouter org)
+  and listed both in `AGENTS.md` ## Skills.
+- **Why:** The owner chose the AI SDK as the provider-agnostic LLM toolkit
+  and OpenRouter as the single provider/gateway. The assignment's discovery
+  loop is LLM-driven, so one mandated client stack avoids drift.
+- **Consequences/follow-up:** No production code uses the SDK yet; the
+  convention applies from the first AI feature onward. The provider reads
+  `OPENROUTER_API_KEY` from the environment by default (verified in the
+  installed package types). A real key must be added to `.env.local` before
+  AI features run.
+- **References:** Project owner's request; `apps/frontend/.env.example`;
+  `AGENTS.md` #### AI SDK + ## Skills; npm `ai` 7.0.94,
+  `@openrouter/ai-sdk-provider` 3.0.0; D-012.

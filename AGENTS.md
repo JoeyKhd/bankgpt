@@ -135,6 +135,16 @@ for frontend work.
 EVM/wallet conventions from the owner's other projects are **not** relevant
 here.
 
+#### AI SDK (apps/frontend)
+
+- **LLM access: `ai` (always) with OpenRouter.** Build AI features and agents
+  with the Vercel AI SDK — never hand-rolled provider HTTP clients. Go through
+  the official OpenRouter provider (`@openrouter/ai-sdk-provider`,
+  `createOpenRouter()`), which reads `OPENROUTER_API_KEY` from the
+  environment. Do not add direct provider SDKs (`@ai-sdk/openai`,
+  `@ai-sdk/anthropic`, ...) unless the owner asks. Use the `ai-sdk` skill for
+  usage questions and `openrouter-models` for model/pricing lookup.
+
 ### Database and authentication (apps/frontend)
 
 - **Auth: `better-auth`** (email + password enabled) backed by **SQLite via
@@ -149,9 +159,10 @@ here.
   and **must stay gitignored** — `data/.gitignore` ignores all contents, and
   `.gitignore` also ignores `/data/*.sqlite` + journal/wal/shm sidecars.
   Commit only the schema and `.env.example`, never the database file.
-- Env vars: `BETTER_AUTH_SECRET` (required), `BETTER_AUTH_URL` and
-  `DATABASE_URL` (optional) — names only in `apps/frontend/.env.example`,
-  where each variable is marked REQUIRED or OPTIONAL.
+- Env vars: `BETTER_AUTH_SECRET` (required), `OPENROUTER_API_KEY`
+  (required for AI features), `BETTER_AUTH_URL` and `DATABASE_URL`
+  (optional) — names only in `apps/frontend/.env.example`, where each
+  variable is marked REQUIRED or OPTIONAL.
 - **Always create `apps/frontend/.env.local` if it does not exist**, filling
   the required values (`openssl rand -base64 32` for `BETTER_AUTH_SECRET`,
   `http://localhost:3000` for `BETTER_AUTH_URL`). `.env.local` is gitignored;
@@ -248,6 +259,10 @@ relevant skill before starting a matching task:
 - `zod` — schema validation best practices (unofficial; repo is zod v4 —
   prefer repo conventions on API drift)
 - `pnpm` (antfu) — pnpm workspace/catalog/patch management
+- `ai-sdk` (official Vercel) — AI SDK patterns: generateText/streamText,
+  agents, tool calling, structured output, useChat
+- `openrouter-models` (official OpenRouter) — OpenRouter model catalog,
+  pricing, and capability lookup
 - `extract-design-system` — extract design tokens from a public website; use
   for the planned `DESIGN.md` from the interface.ai company site
 - `code-review`, `tdd`, `diagnosing-bugs`, `codebase-design`,
