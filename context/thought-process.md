@@ -901,3 +901,23 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   unchanged.
 - **References:** `apps/frontend/app/(app)/chat/chat-client.tsx`,
   `apps/frontend/app/(app)/admin/admin-shell.tsx`.
+
+## D-040 — 2026-09-08T23:32:58Z — Fix bankgpt-mark.svg aspect-ratio warning (Next.js Image)
+
+- **Status:** accepted
+- **Decision/change:** The `<Image>` props for `/bankgpt-mark.svg` now match
+  the mark's intrinsic 100×60 (5:3) viewBox instead of forcing square
+  boxes: chat sidebar 24×24 → 40×24, admin sidebar 26×26 → 45×27, login
+  page 44×44 → 70×42. Root cause of the browser warning "Image with src
+  /bankgpt-mark.svg has either width or height modified, but not the
+  other": next/image detected a CSS-vs-attribute ratio mismatch because the
+  square props distorted the 5:3 SVG.
+- **Why:** Owner-reported console warning; the logo also rendered squashed.
+- **Consequences/follow-up:** The mark renders undistorted at roughly the
+  same visual height; the chat-sidebar lockup is wider than before
+  (24px → 40px box). If the SVG's viewBox ever changes, the props must
+  change with it.
+- **References:** `apps/frontend/app/(app)/chat/chat-client.tsx`,
+  `apps/frontend/app/(app)/admin/admin-shell.tsx`,
+  `apps/frontend/app/login/login-form.tsx`,
+  `apps/frontend/public/bankgpt-mark.svg`.

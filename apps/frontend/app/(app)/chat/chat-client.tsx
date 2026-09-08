@@ -178,7 +178,7 @@ export const ChatClient = () => {
             <Image
               src="/bankgpt-mark.svg"
               alt="BankGPT"
-              width={24}
+              width={40}
               height={24}
               className="shrink-0"
             />

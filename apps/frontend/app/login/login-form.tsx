@@ -53,8 +53,8 @@ export const LoginForm = () => {
         <Image
           src="/bankgpt-mark.svg"
           alt="BankGPT"
-          width={44}
-          height={44}
+          width={70}
+          height={42}
           priority
         />
         <div className="flex flex-col gap-1">
