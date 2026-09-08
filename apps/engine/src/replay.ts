@@ -27,8 +27,10 @@ import {
   assertUrlAllowed,
   assertActionAllowed,
   requireApproval,
+  ApprovalRequiredError,
   type Policy,
 } from "./policy.js"
+import { attachDialogHandler } from "./dialogs.js"
 import type { EvidenceWriter } from "./evidence.js"
 
 /** Inputs as supplied by the caller (validated against the artifact). */
@@ -42,6 +44,20 @@ export type ReplayEvents = {
 const DEFAULT_TIMEOUT_MS = 10_000
 /** Transient conditions get this many attempts before we give up. */
 const MAX_STEP_ATTEMPTS = 3
+
+/**
+ * The app answered a navigation with a transient server error page (the
+ * target's "Core system unavailable — try again" 500). Retried like any
+ * transient condition; the retry loop reloads the page before re-driving.
+ */
+class TransientServerError extends Error {
+  readonly status: number
+  constructor(status: number) {
+    super(`transient server error page (HTTP ${status})`)
+    this.name = "TransientServerError"
+    this.status = status
+  }
+}
 
 /** Substitute `{{inputName}}` placeholders using validated inputs. */
 const substitute = (template: string, inputs: ReplayInputs): string =>
@@ -315,9 +331,35 @@ export const replayCapability = async (
 
   // Policy: risky capabilities need approval (and, per policy, review).
   requireApproval(policy, { risk: artifact.risk, approved: options.approved })
+  // An UNREVIEWED risky capability is not operator-trusted yet: without an
+  // explicit approval token, refuse to execute its mutations.
+  if (
+    policy.requireReviewForRisky &&
+    artifact.risk === "risky" &&
+    !artifact.reviewed &&
+    !options.approved
+  ) {
+    throw new ApprovalRequiredError(
+      `risky capability "${artifact.id}" is not reviewed (reviewed: false)`
+    )
+  }
 
   const context = await options.browser.newContext()
   const page = await context.newPage()
+  // Native confirm/alert dialogs (e.g. the "open this sub-account?" gate) are
+  // answered per policy and logged; auto-accept keeps recorded flows moving.
+  attachDialogHandler(page, policy, evidence, options.runId)
+  // Track the last main-document response status so transient 5xx pages
+  // (the target's "Core system unavailable — try again") are detectable.
+  let lastMainStatus: number | undefined
+  page.on("response", (response) => {
+    if (
+      response.request().isNavigationRequest() &&
+      response.frame() === page.mainFrame()
+    ) {
+      lastMainStatus = response.status()
+    }
+  })
   const outputs: Record<string, string | number | boolean> = {}
   let stepsExecuted = 0
 
@@ -327,6 +369,11 @@ export const replayCapability = async (
     const entryUrl = artifact.targetApp
     assertUrlAllowed(policy, entryUrl)
     await page.goto(entryUrl, { waitUntil: "domcontentloaded" })
+  }
+  // A pre-login bootstrap navigation is never session-counted by the target,
+  // but if it ever 500s, reset the tracker so the step loop can recover.
+  if (lastMainStatus !== undefined && lastMainStatus >= 500) {
+    lastMainStatus = undefined
   }
 
   const fail = async (
@@ -370,6 +417,32 @@ export const replayCapability = async (
       // Deliberate retry for transient conditions (slow loads, races).
       for (let attempt = 1; attempt <= MAX_STEP_ATTEMPTS; attempt++) {
         try {
+          // Transient-5xx recovery: if the LAST action landed on the app's
+          // transient error page ("Core system unavailable — try again"),
+          // reload the idempotent page and re-drive the step. A 5xx answers a
+          // GET render; the recorded step is replayed against the reloaded
+          // page. Bounded by policy.transientErrorMaxReloads.
+          for (
+            let reloads = 0;
+            lastMainStatus !== undefined &&
+            lastMainStatus >= 500 &&
+            reloads < policy.transientErrorMaxReloads;
+            reloads++
+          ) {
+            evidence.logStep({
+              runId: options.runId,
+              stepIndex: i,
+              at: new Date().toISOString(),
+              action: "transient-reload",
+              target: page.url(),
+              reason: `last navigation answered HTTP ${lastMainStatus}; reloading the page and retrying (reload ${reloads + 1}/${policy.transientErrorMaxReloads})`,
+              durationMs: 0,
+              result: "ok",
+            })
+            await page.waitForTimeout(400 * (reloads + 1))
+            await page.reload({ waitUntil: "domcontentloaded" })
+          }
+
           // The page may have moved; re-assert scope before acting.
           if (page.url() !== "about:blank") {
             assertUrlAllowed(policy, page.url())
@@ -380,6 +453,12 @@ export const replayCapability = async (
             detail = `extracted ${step.outputName}=${JSON.stringify(value)}`
           } else {
             detail = await executeStep(page, step, inputs)
+          }
+          // The action itself may have navigated into a transient 5xx page
+          // (e.g. a click whose target page 500s). Surface it so the NEXT
+          // attempt reloads instead of resolving locators on the error page.
+          if (lastMainStatus !== undefined && lastMainStatus >= 500) {
+            throw new TransientServerError(lastMainStatus)
           }
           if (step.checkpoint && step.action !== "wait") {
             const res = await checkCheckpoint(page, step.checkpoint)
