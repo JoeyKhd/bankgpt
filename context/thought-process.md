@@ -303,3 +303,32 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** Project owner's request; `apps/frontend/.env.example`;
   `AGENTS.md` #### AI SDK + ## Skills; npm `ai` 7.0.94,
   `@openrouter/ai-sdk-provider` 3.0.0; D-012.
+
+### D-014 — 2026-09-08T21:01:38Z — Adopt assistant-ui as the must-use chat/agent UI
+
+- **Status:** accepted
+- **Decision/change:** Per the project owner, chat and agent surfaces are
+  built with assistant-ui (https://www.assistant-ui.com) on top of the AI
+  SDK + OpenRouter stack. Installed `@assistant-ui/react`, `@assistant-ui/
+  ai-sdk`, and `@ai-sdk/react` in `apps/frontend`. Documented in `AGENTS.md`
+  #### AI SDK: AI SDK v7 runtime (`useChatRuntime` client-side; route
+  handlers stream with `streamText` + async `convertToModelMessages` and
+  return `createUIMessageStreamResponse`), markdown-first docs (`.md` URLs),
+  no custom chat UIs. Installed the five official skills from
+  `assistant-ui/skills` (`assistant-ui`, `streaming`, `tools`, `primitives`,
+  `runtime`) and listed them in `AGENTS.md` ## Skills.
+- **Why:** The owner chose assistant-ui as the chat/agent UI layer. Its
+  first-party runtime adapter for the AI SDK (v7) and its documented
+  OpenRouter gateway pattern match the stack chosen in D-013, so the whole
+  loop — assistant-ui components → `useChatRuntime` → Next.js route handler →
+  AI SDK v7 → OpenRouter — is covered by first-party docs.
+- **Consequences/follow-up:** assistant-ui components are shadcn-flavored and
+  support Base UI, matching the scaffold. Its docs index lives at
+  `llms.txt`; every page is fetchable as markdown via a `.md` suffix, and an
+  MCP endpoint exists at https://www.assistant-ui.com/mcp. The site also
+  publishes an `assistant-ui-docs` skill (skill.md); the installed GitHub
+  skills from `assistant-ui/skills` are the canonical ones (6K installs).
+  No UI has been built yet; convention applies from the first chat surface.
+- **References:** Project owner's request; https://www.assistant-ui.com/
+  llms.txt + /docs/runtimes/ai-sdk/v7.md + /docs/integrations/gateways.md;
+  `AGENTS.md` #### AI SDK + ## Skills; D-013.

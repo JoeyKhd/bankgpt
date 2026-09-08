@@ -12,6 +12,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/react": "^4.0.97",
+    "@assistant-ui/ai-sdk": "^0.0.4",
+    "@assistant-ui/react": "^0.15.18",
     "@base-ui/react": "^1.8.0",
     "@openrouter/ai-sdk-provider": "^3.0.0",
     "@tanstack/charts": "^0.16.0",

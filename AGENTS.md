@@ -144,6 +144,13 @@ here.
   environment. Do not add direct provider SDKs (`@ai-sdk/openai`,
   `@ai-sdk/anthropic`, ...) unless the owner asks. Use the `ai-sdk` skill for
   usage questions and `openrouter-models` for model/pricing lookup.
+- **Chat/agent UI: `assistant-ui` (always).** Build chat and agent surfaces
+  with assistant-ui on the **AI SDK v7 runtime** (`@assistant-ui/react` +
+  `@assistant-ui/ai-sdk` + `@ai-sdk/react`) — no custom chat UIs. Route
+  handlers stream with `streamText` + `convertToModelMessages` (async in v7)
+  and return `createUIMessageStreamResponse`; the client uses
+  `useChatRuntime`. Docs are markdown-first: append `.md` to any docs page
+  URL, and use the `assistant-ui` skills.
 
 ### Database and authentication (apps/frontend)
 
@@ -263,6 +270,9 @@ relevant skill before starting a matching task:
   agents, tool calling, structured output, useChat
 - `openrouter-models` (official OpenRouter) — OpenRouter model catalog,
   pricing, and capability lookup
+- `assistant-ui` + `streaming`, `tools`, `primitives`, `runtime` (official
+  assistant-ui) — building chat UIs: component registry, streaming behavior,
+  tool UIs, primitives, runtime selection
 - `extract-design-system` — extract design tokens from a public website; use
   for the planned `DESIGN.md` from the interface.ai company site
 - `code-review`, `tdd`, `diagnosing-bugs`, `codebase-design`,
