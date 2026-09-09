@@ -1,7 +1,7 @@
 // Entry point for the automation engine service.
 // Starts the HTTP API + WebSocket control channel (see server.ts).
-import { openEngineDb } from "./db.js"
-import { startEngineServer } from "./server.js"
+import { openEngineDb } from "@/db"
+import { startEngineServer } from "@/server"
 
 const main = () => {
   const port = Number(process.env.ENGINE_PORT ?? 4011)

@@ -17,7 +17,7 @@
  */
 import { mkdirSync, writeFileSync, appendFileSync } from "node:fs"
 import { join } from "node:path"
-import { redactValue, redactText } from "./policy.js"
+import { redactValue, redactText } from "@/policy"
 
 /** One structured step event in a run log. */
 export type StepEvidence = {

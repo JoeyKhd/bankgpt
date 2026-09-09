@@ -12,7 +12,9 @@
     "noUncheckedIndexedAccess": true,
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*.js"] }
   },
   "include": ["src"]
 }

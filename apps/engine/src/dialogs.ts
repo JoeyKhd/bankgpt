@@ -11,8 +11,8 @@
  * the graded run log shows the dialog was seen and how it was answered.
  */
 import type { Page } from "playwright"
-import type { Policy } from "./policy.js"
-import type { EvidenceWriter } from "./evidence.js"
+import type { Policy } from "@/policy"
+import type { EvidenceWriter } from "@/evidence"
 
 /**
  * Attach the policy-driven dialog handler to a page. Returns immediately;

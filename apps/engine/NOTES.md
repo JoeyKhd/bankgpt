@@ -148,3 +148,33 @@ bundle (see its README for the index).
   the member-form 404 variant ("No member exists with ID") is also covered
   by the same text.
 - Approval tokens are still not scoped per capability/run (server-side).
+
+## Module imports: `@/` alias (2026-09-09, owner direction)
+
+Owner direction: replace the NodeNext `./x.js` relative imports with an
+`@/` path alias ("`@/db` instead of `./db.js`"). Every same-package import
+in `src/` is now extensionless `@/<name>`; `node:` and bare package
+specifiers are unchanged.
+
+How it stays runnable under `module: NodeNext` (the reason the `.js`
+extensions existed):
+
+- **`tsconfig.json`** maps `"@/*": ["./src/*.js"]`. The `.js` in the
+  *mapping* (not in the imports) is deliberate: under NodeNext ESM
+  resolution TypeScript does NOT append extensions to extensionless
+  path-mapped candidates, but a candidate ending in `.js` gets the normal
+  `.js`→`.ts` source substitution, so `@/db` typechecks to `src/db.ts`.
+- **`tsc` build** emits `dist/` with the alias verbatim, so the build
+  script runs **`tsc-alias`** after `tsc` (`build`: `tsc -p tsconfig.json
+  && tsc-alias -p tsconfig.json`), which rewrites `@/db` back to the
+  relative `./db.js` Node ESM needs. Verified: `node dist/index.js` boots
+  and answers `/health`.
+- **`tsx` dev** (`dev`, `discover`, `replay` scripts) honors tsconfig
+  `paths` with the same `.js`→`.ts` substitution, so `@/db` resolves to
+  the source file directly. Verified: `tsx src/index.ts` boots.
+
+Alternatives considered: a `package.json` `imports` map (requires `#`-prefixed
+specifiers, not `@/`) and dropping NodeNext for bundler resolution (would
+stop catching missing-extension mistakes the service still needs at Node
+runtime). `tsc-alias` is the least-ugly mechanism that keeps both runtimes
+honest.

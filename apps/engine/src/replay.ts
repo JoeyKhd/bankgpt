@@ -21,18 +21,18 @@ import {
   type CapabilityStep,
   type Target,
   type Checkpoint,
-} from "./artifact.js"
-import type { RunResult } from "./results.js"
+} from "@/artifact"
+import type { RunResult } from "@/results"
 import {
   assertUrlAllowed,
   assertActionAllowed,
   requireApproval,
   ApprovalRequiredError,
   type Policy,
-} from "./policy.js"
-import { attachDialogHandler } from "./dialogs.js"
-import type { EvidenceWriter } from "./evidence.js"
-import { waitWhileNotAutomation, type LiveSession } from "./session.js"
+} from "@/policy"
+import { attachDialogHandler } from "@/dialogs"
+import type { EvidenceWriter } from "@/evidence"
+import { waitWhileNotAutomation, type LiveSession } from "@/session"
 
 /** Inputs as supplied by the caller (validated against the artifact). */
 export type ReplayInputs = Record<string, string | number | boolean>

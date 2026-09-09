@@ -30,17 +30,17 @@ import {
   CapabilityArtifactSchema,
   type CapabilityArtifact,
   type BusinessOutcome,
-} from "./artifact.js"
-import type { DiscoveryResult } from "./results.js"
+} from "@/artifact"
+import type { DiscoveryResult } from "@/results"
 import {
   assertUrlAllowed,
   assertActionAllowed,
   PolicyViolationError,
   type Policy,
-} from "./policy.js"
-import { attachDialogHandler } from "./dialogs.js"
-import type { EvidenceWriter } from "./evidence.js"
-import { waitWhileNotAutomation, type LiveSession } from "./session.js"
+} from "@/policy"
+import { attachDialogHandler } from "@/dialogs"
+import type { EvidenceWriter } from "@/evidence"
+import { waitWhileNotAutomation, type LiveSession } from "@/session"
 
 // ---------------------------------------------------------------------------
 // The action vocabulary the model may choose from (mirrors artifact steps,

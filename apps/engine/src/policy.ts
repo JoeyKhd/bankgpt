@@ -20,7 +20,7 @@
  * risky execution path calls `requireApproval` first.
  */
 import { z } from "zod"
-import { StepActionSchema, RiskClassSchema } from "./artifact.js"
+import { StepActionSchema, RiskClassSchema } from "@/artifact"
 
 export const PolicySchema = z.object({
   /** Regexes the current page URL must match (any one) before any action. */

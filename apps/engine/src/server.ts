@@ -55,7 +55,7 @@ import { randomUUID } from "node:crypto"
 import { WebSocketServer, type WebSocket } from "ws"
 import { chromium, type Browser } from "playwright"
 import type Database from "better-sqlite3"
-import { CapabilityArtifactSchema } from "./artifact.js"
+import { CapabilityArtifactSchema } from "@/artifact"
 import {
   getCapability,
   insertCapability,
@@ -75,17 +75,17 @@ import {
   consumeApprovalToken,
   type CapabilityRow,
   type InterventionRow,
-} from "./db.js"
-import { runDiscovery } from "./discovery.js"
-import { replayCapability, validateInputs } from "./replay.js"
+} from "@/db"
+import { runDiscovery } from "@/discovery"
+import { replayCapability, validateInputs } from "@/replay"
 import {
   defaultPolicy,
   redactText,
   redactValue,
   ApprovalRequiredError,
   type Policy,
-} from "./policy.js"
-import { createEvidenceWriter, type EvidenceWriter } from "./evidence.js"
+} from "@/policy"
+import { createEvidenceWriter, type EvidenceWriter } from "@/evidence"
 import {
   createLiveSession,
   closeLiveSession,
@@ -97,7 +97,7 @@ import {
   getSession,
   listSessions,
   type LiveSession,
-} from "./session.js"
+} from "@/session"
 
 export type ServerOptions = {
   port: number
