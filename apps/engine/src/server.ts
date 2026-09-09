@@ -8,6 +8,8 @@
  *   GET  /capabilities
  *   GET  /capabilities/:id
  *   POST /capabilities                    save/upsert an artifact
+ *   PUT  /capabilities/:id                update/create an artifact (console
+ *                                         review edits; id must match path)
  *   POST /capabilities/:id/review         mark reviewed:true
  *   POST /discover                        start a discovery run (async)
  *   POST /replay                          start a replay run (async)
@@ -721,6 +723,29 @@ export const startEngineServer = (options: ServerOptions) => {
       artifact: JSON.stringify(artifact),
     })
     return json(c, 201, { id: artifact.id, version: artifact.version })
+  })
+
+  // Update (or create) a capability under the :id in the path. Used by the
+  // console review pass to correct a distilled artifact (e.g. fix a
+  // checkpoint) without a DB write. Body must be a valid artifact whose id
+  // matches the path. insertCapability's conflict handling bumps/keeps
+  // review state, so a corrected version never silently strips review.
+  app.put("/capabilities/:id", artifactBody, (c) => {
+    const id = c.req.param("id")
+    const artifact = c.req.valid("json")
+    if (artifact.id !== id) {
+      return json(c, 400, { error: "artifact id must match the path id" })
+    }
+    insertCapability(db, {
+      id: artifact.id,
+      version: artifact.version,
+      name: artifact.name,
+      risk: artifact.risk,
+      reviewed: artifact.reviewed ? 1 : 0,
+      createdAt: artifact.createdAt,
+      artifact: JSON.stringify(artifact),
+    })
+    return json(c, 200, { id: artifact.id, version: artifact.version })
   })
 
   app.post("/capabilities/:id/review", (c) => {

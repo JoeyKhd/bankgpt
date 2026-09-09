@@ -585,6 +585,14 @@ export const reviewCapabilityResponseSchema = z.object({
   id: z.string(),
   reviewed: z.literal(true),
 })
+
+export const updateCapabilityResponseSchema = z.object({
+  id: z.string(),
+  version: z.string(),
+})
+export type UpdateCapabilityResponse = z.infer<
+  typeof updateCapabilityResponseSchema
+>
 export type ReviewCapabilityResponse = z.infer<
   typeof reviewCapabilityResponseSchema
 >

@@ -1914,3 +1914,32 @@ BLOB, createdAt`, PK `(runId, name)`) stores every evidence file as a
   `docker-compose.yaml`, `apps/engine/.env.example`,
   `apps/docs/content/docs/running-locally.mdx`,
   `apps/docs/content/docs/troubleshooting.mdx`.
+
+## D-067 — 2026-09-09T16:00:43Z — Engine PUT /capabilities/:id endpoint for console review edits
+
+- **Status:** accepted
+- **Decision/change:** Added a proper write path to correct a distilled
+  artifact without a DB write. Engine: `PUT /capabilities/:id` (validates
+  against `CapabilityArtifactSchema`, requires the body id to match the
+  path, upserts via `insertCapability` so review state is preserved).
+  Frontend: `PUT /api/engine/capabilities/[id]` (session-gated via
+  `engineRoute`, zod-parses the body, proxies to the engine) plus
+  `updateEngineCapability` in the engine client and an
+  `updateCapabilityResponseSchema`. This is the endpoint the balances
+  checkpoint fix now uses: the discovered `get_member_balances` artifact
+  asserted the single string `Member ID 100231`, which mockbank never
+  renders as one string (split across table cells), so replay failed at the
+  final checkpoint; the corrected artifact asserts `Accounts` instead.
+- **Why:** The console's review pass previously had no way to *edit* an
+  artifact — only to flip `reviewed:true` — so a distiller first-draft
+  mistake (the checkpoint) could only be fixed with a direct DB write,
+  which the public API cannot reach. The owner asked for an API route so
+  the fix can be applied over HTTP.
+- **Consequences/follow-up:** After redeploy, the checkpoint fix is a
+  single authenticated `PUT` (no host/DB access needed). The endpoint
+  accepts any valid artifact for the id — it is an operator tool gated by
+  auth, not a general public write.
+- **References:** `apps/engine/src/server.ts`,
+  `apps/frontend/lib/engine/client.ts`,
+  `apps/frontend/lib/engine/schemas.ts`,
+  `apps/frontend/app/api/engine/capabilities/[id]/route.ts`.

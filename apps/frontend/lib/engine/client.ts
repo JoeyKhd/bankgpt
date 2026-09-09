@@ -40,7 +40,9 @@ import {
   sessionActionResponseSchema,
   sessionStateSchema,
   startRunResponseSchema,
+  updateCapabilityResponseSchema,
   type ApproveInterventionResponse,
+  type CapabilityArtifact,
   type DecideInterventionBody,
   type DiscoverRequest,
   type EngineCapability,
@@ -60,6 +62,7 @@ import {
   type SessionActionResponse,
   type SessionState,
   type StartRunResponse,
+  type UpdateCapabilityResponse,
 } from "./schemas"
 
 /** Engine base URL from env (D-041); the engine's dev default is port 4011. */
@@ -187,6 +190,20 @@ export const markEngineCapabilityReviewed = async (
       method: "POST",
     }),
     `POST /capabilities/${id}/review`
+  )
+
+/** PUT /capabilities/:id — update/create the artifact (console review edits). */
+export const updateEngineCapability = async (
+  id: string,
+  artifact: CapabilityArtifact
+): Promise<UpdateCapabilityResponse> =>
+  parse(
+    updateCapabilityResponseSchema,
+    await engineFetch(`/capabilities/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(artifact),
+    }),
+    `PUT /capabilities/${id}`
   )
 
 // The engine stores the structured run result as a JSON string column;
