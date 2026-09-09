@@ -289,29 +289,35 @@ const withResolvedTarget = async <T>(
 /** Assert one checkpoint condition set against the live page. */
 const checkCheckpoint = async (
   page: Page,
-  checkpoint: Checkpoint
+  checkpoint: Checkpoint,
+  inputs: ReplayInputs = {}
 ): Promise<{ ok: boolean; detail: string }> => {
   const timeout = checkpoint.timeoutMs ?? DEFAULT_TIMEOUT_MS
   if (checkpoint.urlPattern) {
+    // Checkpoints are part of the parameterized contract: {{input}}
+    // placeholders must substitute exactly like step urls/values, or a
+    // parameterized checkpoint can never hold.
+    const pattern = substitute(checkpoint.urlPattern, inputs)
     try {
-      await page.waitForURL(new RegExp(checkpoint.urlPattern), { timeout })
+      await page.waitForURL(new RegExp(pattern), { timeout })
     } catch {
       return {
         ok: false,
-        detail: `URL ${page.url()} did not match /${checkpoint.urlPattern}/ within ${timeout}ms`,
+        detail: `URL ${page.url()} did not match /${pattern}/ within ${timeout}ms`,
       }
     }
   }
   if (checkpoint.visibleText) {
+    const wanted = substitute(checkpoint.visibleText, inputs)
     try {
       await page
-        .getByText(checkpoint.visibleText, { exact: false })
+        .getByText(wanted, { exact: false })
         .first()
         .waitFor({ state: "visible", timeout })
     } catch {
       return {
         ok: false,
-        detail: `visible text "${checkpoint.visibleText}" not found within ${timeout}ms`,
+        detail: `visible text "${wanted}" not found within ${timeout}ms`,
       }
     }
   }
@@ -406,7 +412,7 @@ const executeStep = async (
     }
     case "wait": {
       if (!step.checkpoint) throw new Error("wait step needs a checkpoint")
-      const res = await checkCheckpoint(page, step.checkpoint)
+      const res = await checkCheckpoint(page, step.checkpoint, inputs)
       if (!res.ok) throw new Error(res.detail)
       return `waited: ${res.detail}`
     }
@@ -684,7 +690,7 @@ export const replayCapability = async (
             // the answer, same rule as the post-step failure path.
             const early = await detectBusinessOutcome(page, artifact)
             if (early) throw new BusinessOutcomeInterrupt(early)
-            const res = await checkCheckpoint(page, step.checkpoint)
+            const res = await checkCheckpoint(page, step.checkpoint, inputs)
             if (!res.ok)
               throw new Error(`step checkpoint failed: ${res.detail}`)
           }
@@ -814,7 +820,7 @@ export const replayCapability = async (
       }
     }
 
-    const finalCheck = await checkCheckpoint(page, artifact.checkpoint)
+    const finalCheck = await checkCheckpoint(page, artifact.checkpoint, inputs)
     if (!finalCheck.ok) {
       return await fail(
         artifact.steps.length,

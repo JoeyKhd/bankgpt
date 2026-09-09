@@ -1390,3 +1390,37 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** Owner's Interventions report; `apps/engine/src/db.ts`;
   `apps/frontend/app/(app)/chat/toolkit.tsx`; `chat-client.tsx`; D-049, D-051.
 
+### D-053 — 2026-09-09T12:20:00Z — Checkpoints substitute {{input}}; healed stale open_savings_sub_account checkpoint
+
+- **Status:** accepted
+- **Decision/change:** (1) `checkCheckpoint` in `apps/engine/src/replay.ts`
+  now takes the run inputs and substitutes `{{input}}` placeholders in
+  `urlPattern` and `visibleText` before matching — at the final checkpoint
+  AND both per-step checkpoint call sites. A parameterized checkpoint
+  previously could never hold: the raw template was compiled to RegExp
+  verbatim, so `{{memberId}}` literally appeared in the failure detail.
+  (2) Healed the stored `open_savings_sub_account@1.0.0` artifact in the
+  local engine DB: its checkpoint pinned a literal
+  `…/members/{{memberId}}/…?c=CNF-5001` (placeholder never substituted +
+  single confirmation number), which hard-failed a run that had actually
+  SUCCEEDED in opening the account. It now uses the generalized
+  `/members/\d+/accounts/\d+/confirmation\?c=CNF-\d+` + "Sub-account
+  opened" — matching any member, account, and confirmation number across
+  resets.
+- **Why:** Owner's manual approval run showed a "hard failure" on a
+  successful flow: the account was created and the confirmation page
+  reached, but the malformed checkpoint rejected it. A checkpoint that
+  can't survive the target's own deterministic counters makes replay
+  single-use, breaking the core determinism promise.
+- **Consequences/follow-up:** Verified by execution: the healed checkpoint
+  regex matches both run-1 (CNF-5001) and post-reset run-2 (CNF-5002)
+  confirmation URLs; the stored artifact parses under the strict schema;
+  root format / lint / typecheck / build all pass. The pending approval for
+  `open_sub_account@1.0.0` (correct generalized checkpoint already) is
+  unaffected and can be approved as-is. Root cause class — the distiller
+  emitting un-parameterized or un-substitutable checkpoint values — is
+  mitigated by the strict TargetSchema reuse (D-051) but checkpoint
+  GENERALIZATION guidance in the distill prompt is a worthwhile follow-up.
+- **References:** Owner's approval-run report; `apps/engine/src/replay.ts`
+  (checkCheckpoint); engine DB `open_savings_sub_account@1.0.0`; D-051.
+
