@@ -1,6 +1,8 @@
 import type { Metadata } from "next"
 import { IBM_Plex_Mono, Inter } from "next/font/google"
 
+import PlausibleProvider from "next-plausible"
+
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -130,9 +132,18 @@ export default function RootLayout({
             }),
           }}
         />
-        <ThemeProvider>
-          <TooltipProvider>{children}</TooltipProvider>
-        </ThemeProvider>
+        {/* Plausible analytics (self-hosted instance). next-plausible is pinned
+            to v3 because the instance serves the classic data-domain script;
+            v4 targets Plausible's script v2 (pa-*.js) only. Loads in
+            production only by default. */}
+        <PlausibleProvider
+          domain="bankgpt-app.lotshot.ai"
+          customDomain="http://joey-general-plausible-bb6764-65-108-66-106.sslip.io"
+        >
+          <ThemeProvider>
+            <TooltipProvider>{children}</TooltipProvider>
+          </ThemeProvider>
+        </PlausibleProvider>
       </body>
     </html>
   )
