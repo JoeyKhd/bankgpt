@@ -419,6 +419,38 @@ export const engineHealthSchema = z.object({
 })
 export type EngineHealth = z.infer<typeof engineHealthSchema>
 
+/**
+ * GET /policy response — the effective safety policy (mirror of
+ * `PolicySchema` in apps/engine/src/policy.ts). The engine answers the
+ * fully-parsed policy, so every defaulted field is always present on the
+ * wire. Redaction is NOT part of this schema: it is engine-side code
+ * (`redactText` / `redactValue`) applied to every response and artifact,
+ * not an operator-tunable policy field.
+ */
+export const enginePolicySchema = z.object({
+  /** Regexes the current page URL must match (any one) before any action. */
+  allowedUrlPatterns: z.array(z.string()).min(1),
+  /** Action types the agent may execute. */
+  allowedActions: z.array(stepActionSchema).min(1),
+  /** Allowed actions treated as safe/reversible; the rest need approval. */
+  safeActions: z.array(stepActionSchema),
+  /** Capability risk classes that always require an approval token. */
+  riskyClassesRequireApproval: z.array(riskClassSchema),
+  /** Require human review before a risky capability replays. */
+  requireReviewForRisky: z.boolean(),
+  /** Max discovery steps before the loop stops itself. */
+  maxDiscoverySteps: z.number().int().positive(),
+  /** Discovery wall-clock timeout. */
+  discoveryTimeoutMs: z.number().int().positive(),
+  /** How the engine answers browser-native dialogs (confirm/alert/prompt). */
+  dialogHandling: z.enum(["accept", "dismiss"]),
+  /** Bounded reload-and-redrive retries after a transient error page. */
+  transientErrorMaxReloads: z.number().int().nonnegative(),
+  /** How long a stuck run waits for an operator handoff before failing. */
+  handoffTimeoutMs: z.number().int().positive(),
+})
+export type EnginePolicy = z.infer<typeof enginePolicySchema>
+
 // ── Request/response bodies for the mutating endpoints ──────────────────
 
 /** POST /discover body (async; 202 answers with a runId). */

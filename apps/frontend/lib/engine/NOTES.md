@@ -104,3 +104,34 @@ Contract notes: no screenshot/artifact-binary endpoint exists — hard
 failures surface `evidenceDir` (a path on the engine host), which the UI
 renders as a path hint only. The capability list endpoint exposes no
 `targetApp`/step count, hence the per-card detail fetch.
+
+
+## Policy surface (appended)
+
+The `/admin/policy` page is now a live, read-only view of the engine's
+effective safety policy instead of a hardcoded stub:
+
+- Engine: `GET /policy` in `apps/engine/src/server.ts` answers the
+  effective `Policy` (redacted through `redactValue` like every JSON
+  response). There is deliberately **no** write route — the policy is
+  defined in code (`defaultPolicy()` in `apps/engine/src/policy.ts`, or
+  `ServerOptions.policy` injected by the host) and editing stays a config
+  concern; the assignment asks for a configurable allowlist, not a policy
+  editor.
+- `schemas.ts` — `enginePolicySchema` mirrors `PolicySchema` (the engine
+  answers the fully-parsed policy, so all defaulted fields are present on
+  the wire). Redaction is intentionally NOT in the schema: it is
+  engine-side code (`redactText` / `redactValue`), not a tunable field.
+- `client.ts` — `getEnginePolicy()`; proxy route
+  `app/api/engine/policy/route.ts` (`engineRoute`, auth-gated, 503 when
+  offline).
+- `queries.ts` — `engineKeys.policy()`, `fetchEnginePolicy`,
+  `policyQuery()` (no polling: the policy is static per engine process).
+- `components/admin/policy-view.tsx` — renders the URL allowlist, allowed
+  vs safe action chips, the derived risky-action set (`allowedActions`
+  minus `safeActions` → approval per occurrence), risky classes requiring
+  approval, `requireReviewForRisky`, dialog handling, transient-reload /
+  discovery / handoff bounds, and a redaction summary (engine-enforced).
+  Loading skeleton, amber engine-offline banner (with a note pointing at
+  `defaultPolicy()` — never hardcoded fallback values), and error banner
+  match the other admin pages.

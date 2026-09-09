@@ -28,6 +28,7 @@ import {
   engineEvidenceSchema,
   engineHealthSchema,
   engineInterventionSchema,
+  enginePolicySchema,
   engineRunSchema,
   rejectInterventionResponseSchema,
   replayRequestSchema,
@@ -46,6 +47,7 @@ import {
   type EngineEvidence,
   type EngineHealth,
   type EngineIntervention,
+  type EnginePolicy,
   type EngineRun,
   type RejectInterventionResponse,
   type ReplayRequest,
@@ -62,6 +64,7 @@ import {
 export const engineKeys = {
   all: ["engine"] as const,
   status: () => [...engineKeys.all, "status"] as const,
+  policy: () => [...engineKeys.all, "policy"] as const,
   capabilities: () => [...engineKeys.all, "capabilities"] as const,
   capability: (id: string) => [...engineKeys.capabilities(), id] as const,
   runs: () => [...engineKeys.all, "runs"] as const,
@@ -134,6 +137,9 @@ const engineRetry = (failureCount: number, error: Error) =>
 export const fetchEngineStatus = (): Promise<EngineHealth> =>
   proxyFetch(engineHealthSchema, "/api/engine/status")
 
+export const fetchEnginePolicy = (): Promise<EnginePolicy> =>
+  proxyFetch(enginePolicySchema, "/api/engine/policy")
+
 export const fetchCapabilities = (): Promise<EngineCapabilitySummary[]> =>
   proxyFetch(z.array(engineCapabilitySummarySchema), "/api/engine/capabilities")
 
@@ -177,6 +183,14 @@ export const engineStatusQuery = () =>
   queryOptions({
     queryKey: engineKeys.status(),
     queryFn: fetchEngineStatus,
+    retry: engineRetry,
+  })
+
+/** The engine's effective safety policy; static per process, so no poll. */
+export const policyQuery = () =>
+  queryOptions({
+    queryKey: engineKeys.policy(),
+    queryFn: fetchEnginePolicy,
     retry: engineRetry,
   })
 

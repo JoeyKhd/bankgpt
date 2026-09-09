@@ -26,6 +26,7 @@ import {
   engineHealthSchema,
   engineInterventionRowSchema,
   engineInterventionSchema,
+  enginePolicySchema,
   engineRunResultSchema,
   engineRunRowSchema,
   engineRunSchema,
@@ -48,6 +49,7 @@ import {
   type EngineRunResult,
   type EngineHealth,
   type EngineIntervention,
+  type EnginePolicy,
   type EngineRun,
   type RejectInterventionResponse,
   type ReplayRequest,
@@ -130,6 +132,11 @@ const parse = <S extends z.ZodType>(
 /** GET /health — cheap liveness probe for the console's engine status. */
 export const getEngineHealth = async (): Promise<EngineHealth> =>
   parse(engineHealthSchema, await engineFetch("/health"), "GET /health")
+
+/** GET /policy — the effective safety policy (read-only; editing is a
+ * config concern in apps/engine/src/policy.ts, not a console feature). */
+export const getEnginePolicy = async (): Promise<EnginePolicy> =>
+  parse(enginePolicySchema, await engineFetch("/policy"), "GET /policy")
 
 /** GET /capabilities — one row per stored version, newest first. */
 export const listEngineCapabilities = async (): Promise<
