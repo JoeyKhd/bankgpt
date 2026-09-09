@@ -25,11 +25,6 @@ export const CHAT_SUGGESTIONS: SuggestionConfig[] = [
     prompt: "Look up member 100231 and read their current balances.",
   },
   {
-    title: "Look up a member",
-    label: "Member 100774 balances",
-    prompt: "Look up member 100774 and read their current balances.",
-  },
-  {
     title: "Open a sub-account",
     label: APPROVAL_REQUIRED_LABEL,
     prompt:
