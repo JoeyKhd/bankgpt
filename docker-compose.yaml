@@ -1,0 +1,108 @@
+# One command, whole product: frontend :3000, engine :4011, mockbank :4010,
+# docs :3001. SQLite databases persist on named volumes.
+#
+#   docker compose build
+#   OPENROUTER_API_KEY=... BETTER_AUTH_SECRET=... docker compose up
+#
+# Or copy .env.example to .env and fill the values, then `docker compose up`.
+#
+# Reaching mockbank from inside the network: the engine runs Playwright, so
+# discovery targets must use the service name, e.g.
+#   http://mockbank:4010  (not http://localhost:4010 — inside the engine
+#   container that would be the container itself).
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    ports:
+      - "${FRONTEND_HOST_PORT:-3000}:3000"
+    environment:
+      # REQUIRED: better-auth token signing secret (min 32 chars).
+      #   openssl rand -base64 32
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET (openssl rand -base64 32)}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      # REQUIRED for AI features (chat + discovery models via OpenRouter).
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      # Persistent SQLite on the named volume (auth + chat + app data).
+      DATABASE_URL: /data/app.sqlite
+      # Server-side engine API base (proxied at /api/engine/*). Inside the
+      # network the engine is reachable by service name.
+      ENGINE_URL: http://engine:4011
+      # The BROWSER connects to the WS channel directly, so this must be the
+      # host-reachable URL, not the service name.
+      NEXT_PUBLIC_ENGINE_WS_URL: ${NEXT_PUBLIC_ENGINE_WS_URL:-ws://localhost:4011/ws}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+    volumes:
+      - frontend-data:/data
+    depends_on:
+      engine:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: wget -q -O /dev/null http://127.0.0.1:3000/login || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  engine:
+    build:
+      context: .
+      dockerfile: apps/engine/Dockerfile
+    ports:
+      - "${ENGINE_HOST_PORT:-4011}:4011"
+    environment:
+      ENGINE_PORT: "4011"
+      # Persistent SQLite on the named volume (capabilities, runs,
+      # interventions, run evidence files — D-059).
+      ENGINE_DB_PATH: /data/engine.sqlite
+      # REQUIRED for the discovery loop's model calls.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    volumes:
+      - engine-data:/data
+    depends_on:
+      mockbank:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: wget -q -O /dev/null http://127.0.0.1:4011/health || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  mockbank:
+    build:
+      context: .
+      dockerfile: apps/mockbank/Dockerfile
+    ports:
+      - "${MOCKBANK_HOST_PORT:-4010}:4010"
+    environment:
+      # Bind all interfaces inside the container (default is 127.0.0.1,
+      # which would be unreachable from the engine container).
+      MOCKBANK_HOST: 0.0.0.0
+      PORT: "4010"
+      # MOCKBANK_NO_DELAY: "1"  # uncomment to disable the artificial latency
+    restart: unless-stopped
+    healthcheck:
+      test: wget -q -O /dev/null http://127.0.0.1:4010/ || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  docs:
+    build:
+      context: .
+      dockerfile: apps/docs/Dockerfile
+    ports:
+      - "${DOCS_HOST_PORT:-3001}:3001"
+    restart: unless-stopped
+
+# Persistent storage for the two SQLite databases (survive
+# `docker compose down`; wiped only by `docker compose down -v`).
+volumes:
+  frontend-data: # apps/frontend  -> /data/app.sqlite   (auth + app data)
+  engine-data:   # apps/engine    -> /data/engine.sqlite (capabilities, runs, evidence)
