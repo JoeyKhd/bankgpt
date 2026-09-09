@@ -6,6 +6,7 @@ import {
   MessageSquareIcon,
   SearchIcon,
   ShieldAlertIcon,
+  TriangleAlertIcon,
 } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
@@ -13,6 +14,14 @@ import { headers } from "next/headers"
 
 import { auth } from "@/lib/auth"
 import { CAPABILITIES } from "@/lib/capabilities-catalog"
+import { getEngineOverview } from "@/lib/engine/client"
+import {
+  engineErrorMessage,
+  isEngineError,
+  type EngineCapabilitySummary,
+  type EngineIntervention,
+  type EngineRun,
+} from "@/lib/engine"
 
 export const metadata: Metadata = { title: "Overview" }
 
@@ -20,6 +29,39 @@ export const dynamic = "force-dynamic"
 
 const monoEyebrow =
   "font-mono text-xs font-medium uppercase tracking-[0.14em] text-emerald-300/80"
+
+type EngineState =
+  | {
+      online: true
+      capabilities: EngineCapabilitySummary[]
+      runs: EngineRun[]
+      interventions: EngineIntervention[]
+    }
+  | { online: false; reason: string }
+
+// Live engine data when reachable; the console degrades to the stub
+// catalog (plus an offline hint) when the engine is down (D-041).
+const loadEngineState = async (): Promise<EngineState> => {
+  try {
+    const overview = await getEngineOverview()
+    return { online: true, ...overview }
+  } catch (error) {
+    if (isEngineError(error)) {
+      return { online: false, reason: engineErrorMessage(error) }
+    }
+    throw error
+  }
+}
+
+// GET /capabilities returns one row per stored version, newest first —
+// stats count each capability once, by its latest version.
+const latestVersionPerCapability = (rows: EngineCapabilitySummary[]) => {
+  const byId = new Map<string, EngineCapabilitySummary>()
+  for (const row of rows) {
+    if (!byId.has(row.id)) byId.set(row.id, row)
+  }
+  return [...byId.values()]
+}
 
 const Stat = ({
   label,
@@ -45,7 +87,7 @@ const Stat = ({
     >
       {value}
     </span>
-    {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
+    {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
   </div>
 )
 
@@ -81,9 +123,24 @@ export default async function AdminOverviewPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   const isAdmin = session?.user.role === "admin"
 
-  const capabilityCount = CAPABILITIES.length
-  const riskyCount = CAPABILITIES.filter((c) => c.risk === "risky").length
-  const openInterventions = 0 // engine not connected yet
+  const engine = await loadEngineState()
+
+  const stubRiskyCount = CAPABILITIES.filter((c) => c.risk === "risky").length
+  const liveCapabilities = engine.online
+    ? latestVersionPerCapability(engine.capabilities)
+    : []
+  const capabilityCount = engine.online
+    ? liveCapabilities.length
+    : CAPABILITIES.length
+  const riskyCount = engine.online
+    ? liveCapabilities.filter((c) => c.risk === "risky").length
+    : stubRiskyCount
+  const openInterventions = engine.online
+    ? engine.interventions.filter((i) => i.status === "pending").length
+    : null
+  const replayRunCount = engine.online
+    ? engine.runs.filter((r) => r.kind === "replay").length
+    : null
 
   return (
     <div className="flex flex-col gap-8">
@@ -101,11 +158,33 @@ export default async function AdminOverviewPage() {
         </p>
       </div>
 
+      {!engine.online && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] p-4">
+          <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-amber-300" />
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-amber-200">
+              Engine offline — showing the stub catalog
+            </span>
+            <span className="text-xs leading-relaxed text-muted-foreground">
+              Start it with{" "}
+              <code className="font-mono text-emerald-300">
+                pnpm --filter engine dev
+              </code>{" "}
+              and refresh. ({engine.reason})
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Stat
           label="Capabilities"
           value={capabilityCount}
-          hint="stub catalog until the engine records real ones"
+          hint={
+            engine.online
+              ? "recorded by the engine"
+              : "stub catalog — engine offline"
+          }
         />
         <Stat
           label="Risky"
@@ -115,14 +194,34 @@ export default async function AdminOverviewPage() {
         />
         <Stat
           label="Open interventions"
-          value={openInterventions}
-          hint="engine not connected"
+          value={openInterventions ?? "—"}
+          hint={
+            engine.online ? "waiting on a human decision" : "engine offline"
+          }
         />
-        <Stat label="Replay runs" value="—" hint="land with the engine" />
+        <Stat
+          label="Replay runs"
+          value={replayRunCount ?? "—"}
+          hint={engine.online ? "finished or in flight" : "engine offline"}
+        />
       </div>
 
-      {/* Intervention banner renders here once the engine reports open
-          interventions; the count is 0 while it is not connected. */}
+      {engine.online && openInterventions !== null && openInterventions > 0 && (
+        <Link
+          href="/admin/interventions"
+          className="flex items-center justify-between gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] p-4 transition-colors hover:border-amber-400/40"
+        >
+          <div className="flex items-center gap-3">
+            <BotIcon className="size-4 shrink-0 text-amber-300" />
+            <span className="text-sm text-amber-200">
+              {openInterventions}{" "}
+              {openInterventions === 1 ? "intervention" : "interventions"}{" "}
+              waiting for a human decision
+            </span>
+          </div>
+          <ArrowRightIcon className="size-4 text-amber-300" />
+        </Link>
+      )}
 
       <div className="flex flex-col gap-3">
         <span className={monoEyebrow}>Start</span>
