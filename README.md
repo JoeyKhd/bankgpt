@@ -15,7 +15,7 @@ gets stuck, then hand control back.
 
 - Design write-up: **[REPORT.md](REPORT.md)**
 - Graded run bundle (genuine discovery + replay evidence): **[evidence/](evidence/README.md)**
-- Decision ledger (D-001…D-048): [context/thought-process.md](context/thought-process.md)
+- Decision ledger (D-001…D-049): [context/thought-process.md](context/thought-process.md)
 - Assignment: [context/assignment.md](context/assignment.md)
 
 ## Monorepo layout
@@ -58,12 +58,11 @@ engine redacts secret/PII-shaped values from everything it persists.
 
 ## Run
 
-Three processes, three terminals:
+**One command starts the whole demo** (mockbank :4010 + engine :4011 +
+frontend :3000, in parallel) — do not also start the services individually:
 
 ```bash
-pnpm --filter mockbank dev    # FinCore Teller target  → http://127.0.0.1:4010
-pnpm --filter engine dev      # engine HTTP + WS API    → http://127.0.0.1:4011
-pnpm dev                      # frontend console + chat → http://localhost:3000
+pnpm dev                      # everything → http://localhost:3000
 ```
 
 Open `http://localhost:3000` and register — **the first registered user is
@@ -71,6 +70,18 @@ the admin**. `/chat` is the caller simulation (ask it to look up a member or
 open a sub-account; risky capabilities raise a segregated operator
 approval). `/admin` holds the capability catalog, run history, discovery
 form, and the interventions inbox with the live-session take-over panel.
+
+If you ever need one service on its own (debugging, the CLI demo below),
+use the per-app scripts (`pnpm --filter mockbank dev`,
+`pnpm --filter engine dev`, `pnpm --filter frontend dev`) — but then do not
+also run `pnpm dev`, or the ports collide.
+
+First run only: the frontend's auth schema must exist before sign-in works.
+If `apps/frontend/data/app.sqlite` does not exist yet, create it once:
+
+```bash
+cd apps/frontend && pnpm dlx @better-auth/cli@latest migrate --config lib/auth.ts
+```
 
 ## Demo path (discover → replay)
 
@@ -93,7 +104,20 @@ pnpm --filter engine discover \
   --goal "Open a new savings sub-account for member 100231 with an initial deposit of 250 and reach the confirmation screen" \
   --target http://127.0.0.1:4010
 
-# 2. Deterministic replay (ZERO model calls; no API key needed).
+#    Each discover prints the RETURNED artifact id (savedArtifactId) — use
+#    exactly that id below. Freshly distilled artifacts are reviewed:false.
+
+# 2. Review the artifact (required before a RISKY capability replays).
+#    Human review is part of the workflow: read the saved artifact
+#    (apps/engine/evidence/artifacts/<id>.json), fix target bindings or
+#    detect strings if needed, then import + mark it reviewed. Safe
+#    capabilities replay unreviewed; risky ones do not.
+#      - With the server running: POST /capabilities (import the edited
+#        artifact) then POST /capabilities/<id>/review.
+#      - For the CLI demo the checked-in artifacts already carry
+#        reviewed:true from their documented review pass (below).
+
+# 3. Deterministic replay (ZERO model calls; no API key needed).
 pnpm --filter engine replay --capability get_member_balances --input memberId=100231
 
 # Exceptional replays — expected business outcomes, not crashes:

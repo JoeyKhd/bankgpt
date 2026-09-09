@@ -1240,3 +1240,68 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   refresh it.
 - **References:** `apps/engine/src/server.ts`, `tsconfig.json`,
   `apps/engine/NOTES.md`, `/evidence/runs/`; D-041, D-047.
+
+### D-049 — 2026-09-09T11:12:22Z — Review fixes: strict artifact contract, ordered fallback, pinned + honest approvals
+
+- **Status:** accepted (post-review hardening; coordinates with the parallel
+  core-policy worker, which owns retry/handoff safety gates — none of those
+  were reverted).
+- **Decision/change:** Implemented the artifact/replay-contract and
+  documentation corrections surfaced by the pre-submission review:
+  (1) **Locator schema is now a strict discriminated union** on `strategy`
+  (`a11y` requires nonempty `role`+`name`, `css` nonempty `css`, `text`
+  nonempty `text`; foreign keys rejected). This rejects the malformed legacy
+  probe fallback `{strategy: "text", value: "Member summary"}` at parse time
+  instead of silently never matching it. The graded probe artifact
+  (`evidence/artifacts/get_member_balances__handoff-probe.json`) is kept
+  byte-identical as run history; the correction is documented in
+  `evidence/README.md`, not edited into the file.
+  (2) **`resolveTarget` is a real ordered fallback chain**: the primary,
+  then each fallback IN RECORDED ORDER, each given a short probe window; the
+  Playwright `.or().first()` union (which merges matches in DOM order and
+  could let a higher-up fallback beat the primary) is gone. An action
+  failing on a RESOLVED element still fails for real instead of being
+  masked by the remaining fallbacks.
+  (3) **Output contract validation**: extract steps coerce + validate each
+  value against its declared output type (string/number/boolean/date), a
+  successful replay must fill every declared output, and undeclared outputs
+  are rejected. The artifact schema now also enforces per-action required
+  step fields (navigate→url, click/type/select→target, press→key,
+  wait→checkpoint, extract→outputName+extractKind) and unique
+  input/output/outcome names via `superRefine`.
+  (4) **Approvals pin the immutable artifact**: a request records the
+  artifact `version` + a SHA-256 content hash in the intervention context;
+  approval resolves that exact version and re-verifies the hash (mismatch →
+  409), so the run executes the artifact the operator approved, never a
+  mutated "latest". Token consumption is now an atomic conditional UPDATE
+  (`… WHERE consumedByRunId IS NULL`), so two approvals cannot both start a
+  run off one token.
+  (5) **Review state is authoritative in the DB column** and no longer
+  bypassable by approval: `requireReviewForRisky` refuses an unreviewed
+  risky artifact with OR WITHOUT a token (previously an approval skipped the
+  gate), and a re-saved `reviewed:false` artifact cannot strip a review
+  another version earned.
+  (6) **Docs/setup**: root README gives ONE `pnpm dev` path (no duplicate
+  services), the first-run auth migration command, and a discovery→replay
+  section that names the returned artifact id + the import/review workflow;
+  REPORT claims updated to implementation truth (strict schema, ordered
+  fallback, pinned approvals, independent review gate, the honest handoff
+  read, no pixel-sensitive screenshot guarantee); the transient-500 evidence
+  wording now states the saved probe result is `hard_failure`; the handoff
+  proof claim now says the stale PRIMARY (not a working fallback) caused the
+  stuck and the malformed fallback never fired.
+- **Why:** The review found the artifact contract too permissive (a
+  malformed locator shipped), the replay target resolution subtly unordered,
+  outputs unvalidated, approvals executing a mutable artifact, and the
+  review gate bypassable — plus several documentation claims that had drifted
+  from what the runs actually show.
+- **Consequences/follow-up:** Behavior change: `POST /approvals` on an
+  unreviewed risky capability now answers 409 (request review first), and
+  `POST /replay` with an approval token on an unreviewed risky artifact
+  fails closed. The frontend's loose locator mirror still parses every
+  stored artifact (the strict union is a subset); tightening the mirror is a
+  follow-up, not required. No automated tests added (project convention:
+  manual verification); schema/db behavior was smoke-checked by execution.
+- **References:** `apps/engine/src/artifact.ts`, `src/replay.ts`, `src/db.ts`,
+  `src/server.ts`; `README.md`, `REPORT.md`, `evidence/README.md`;
+  D-043, D-045, D-047.

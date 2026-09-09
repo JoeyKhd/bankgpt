@@ -6,7 +6,7 @@ capability through deterministic, model-free replay. Operators approve risky
 actions and take over live sessions when automation is stuck. The graded
 evidence for every claim below is in [`/evidence/`](evidence/README.md);
 the full decision history is the ledger (`context/thought-process.md`,
-D-001…D-048).
+D-001…D-049).
 
 # Architecture
 
@@ -79,13 +79,18 @@ executor, and the calling agent. All validation is zod; every type is
   reviewer-facing `intent`, `{{input}}` placeholder substitution, and an
   optional per-step `checkpoint`. `extract` steps fill declared outputs
   (element text, input value, or a regex capture from visible page text).
-- **Strategy-tagged locators with fallbacks.** Every step target records a
-  primary `a11y` locator (role + accessible name, exact match), the other
-  observed locators (`css`, `text`) as ordered fallbacks, and a
-  human-readable `robustness` note explaining *why* the target should
-  survive UI drift. Pixel coordinates are never recorded — they do not
-  survive restyling, and restyling is the common case across tenants sharing
-  a vendor product.
+- **Strategy-tagged locators with fallbacks, as a strict schema.** Every
+  step target records a primary `a11y` locator (role + accessible name,
+  exact match), the other observed locators (`css`, `text`) as ordered
+  fallbacks, and a human-readable `robustness` note explaining *why* the
+  target should survive UI drift. The locator schema is a strict
+  discriminated union on `strategy` — each variant requires its own
+  nonempty fields and rejects foreign keys, so a malformed legacy locator
+  like `{strategy: "text", value: "…"}` (which once shipped in a probe
+  artifact) is now rejected at parse time instead of silently never
+  matching. Pixel coordinates are never recorded — they do not survive
+  restyling, and restyling is the common case across tenants sharing a
+  vendor product.
 - **Machine-checkable checkpoint** (URL regex and/or visible text and/or
   required element) asserted at the end of replay — the run proves it
   arrived instead of assuming the last click worked.
@@ -106,12 +111,20 @@ graded artifacts (`evidence/artifacts/`) carry that review pass.
 # Determinism & error handling
 
 Replay (`apps/engine/src/replay.ts`) makes **zero model calls**. It resolves
-each target by the primary a11y locator, then the recorded fallbacks in
-order, with explicit waits; validates inputs against the declared contract
-(enum membership, required fields) before acting; substitutes `{{input}}`
-placeholders; checks business outcomes after each step; and asserts the
-checkpoint at the end. Policy (URL + action allowlists) is re-checked before
-every navigation and every action, because the page may have moved.
+each target by the primary a11y locator, then the recorded fallbacks **in
+recorded order** — an explicit per-candidate probe, not Playwright's
+`locator.or(...).first()` union, which would merge matches in DOM order and
+let a higher-up fallback silently beat the primary; validates inputs against
+the declared contract (enum membership, required fields) before acting;
+substitutes `{{input}}` placeholders; extracts each declared output and
+**coerces + validates it against the declared output contract** (unknown
+outputs rejected, every declared output required, string/number/boolean/date
+honestly converted); checks business outcomes after each step; and asserts
+the checkpoint at the end. The artifact schema also enforces per-action
+required step fields and unique input/output/outcome names, so a malformed
+artifact fails at parse time, not mid-run. Policy (URL + action allowlists)
+is re-checked before every navigation and every action, because the page may
+have moved.
 
 Every run ends in a structured result (`src/results.ts`) — never a thrown
 exception for an expected runtime condition:
@@ -196,15 +209,21 @@ and every human action is recorded in the run evidence and the session
 control log.
 
 This is proven, not described: run `30b5f038-…` replayed a proof-only
-artifact copy with step 6's locator seeded stale. The engine raised the
-stuck intervention with screenshot + aria, paused, and waited; the operator
-sent `pause` → `cede` over `/ws`, read the live state, clicked the real
-"View member" link on the same page via the action endpoint, and sent
-`resume`. The run re-drove the step (which now passed — the human had
-landed it on the right page), extracted all three outputs, finished
-`success`, and the intervention auto-resolved with the operator's identity
-and note. Handoff evidence: `intervention.json`, `control.json`,
-`handoff-step-6.png/.yml`, and the `human-action` entries in `steps.jsonl`.
+artifact copy whose step-6 PRIMARY a11y locator was seeded stale (the
+pre-rename label "Member summary"). Its recorded fallback never fired — it
+was the malformed legacy shape `{strategy: "text", value: "…"}` that the
+strict locator schema now rejects — so the step genuinely exhausted every
+attempt with no matching outcome. The engine raised the stuck intervention
+with screenshot + aria, paused, and waited; the operator sent `pause` →
+`cede` over `/ws`, read the live state, clicked the real "View member" link
+on the same page via the action endpoint, and sent `resume`. The run
+re-drove the step (which now passed — the human had landed it on the right
+page), extracted all three outputs, finished `success`, and the
+intervention auto-resolved with the operator's identity and note. Handoff
+evidence: `intervention.json`, `control.json`, `handoff-step-6.png/.yml`,
+and the `human-action` entries in `steps.jsonl`. The honest read: this run
+proves the *control-transfer and recovery* path (a human unsticking a run
+automation could not), not a fallback saving the day.
 
 # Safety
 
@@ -217,8 +236,13 @@ in discovery and replay alike (D-043, D-045, D-047):
 - **Risk classes with conservative defaults.** Capabilities are `safe` or
   `risky`; actions outside the safe set and the whole `risky` class require
   an approval token, and `requireReviewForRisky` refuses to replay an
-  unreviewed risky artifact at all. Native dialogs — the legacy risky-submit
-  gate — are answered per explicit operator policy, never silently.
+  unreviewed risky artifact at all — review is an INDEPENDENT gate, not an
+  approval substitute: an approval token authorizes one run of a REVIEWED
+  artifact and cannot bypass a missing review. Review state is authoritative
+  in a DB column (the embedded artifact flag is a snapshot), and re-saving
+  an artifact cannot silently strip a review another version earned. Native
+  dialogs — the legacy risky-submit gate — are answered per explicit
+  operator policy, never silently.
 - **Segregated approval (maker ≠ checker).** A risky invocation creates an
   `awaiting_approval` run with zero steps executed and records
   `requestedBy`; a *different* operator decides (`decidedBy` is required and
@@ -226,7 +250,14 @@ in discovery and replay alike (D-043, D-045, D-047):
   detected and flagged `selfApproved`). Approval issues a one-time token
   scoped to that capability and consumed by exactly one run
   (`consumedByRunId`); the engine verifies the scope and
-  single-use constraint server-side and starts the run itself. Proven in run `c48ffa84-…`
+  single-use constraint server-side and starts the run itself. The approval
+  also **pins the immutable artifact**: the request records the artifact
+  `version` + a SHA-256 content hash, and at approval time the engine
+  resolves that exact version and re-verifies the hash — the run executes
+  the artifact the operator actually approved, never a mutated or replaced
+  "latest" (a mismatch answers 409). Token consumption is an atomic
+  conditional update, so two approvals cannot both start a run off one
+  token. Proven in run `c48ffa84-…`
   (`proof-requester@…` requested, `proof-operator@…` approved,
   `selfApproved: false`).
 - **Redaction of regulated data.** Everything persisted — step logs,
@@ -270,6 +301,12 @@ Deliberate omissions, each traded for depth elsewhere:
   snapshots plus discrete actions on the live page (the assignment's scope
   note allows this); a live mouse/keyboard mirror over the same session is
   the designed-for but unbuilt next step.
+- **No pixel-sensitive screenshot guarantee.** Evidence screenshots/aria
+  snapshots are captured best-effort at failure/handoff time; because the
+  target injects random latency and a transient 500 cadence, two runs of the
+  same flow do not produce byte-identical images. Determinism is claimed for
+  the structured RESULT (outputs, outcome codes), never for the visual
+  artifacts.
 - **CLI replay is operator-invoked.** It passes `approved: true` implicitly
   and reads artifacts from the local evidence dir; the segregated approval
   flow lives on the HTTP path.
