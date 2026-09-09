@@ -191,6 +191,14 @@ const sessionActionBodySchema = z.object({
 })
 
 /** Shared validation hook: first issue message, same `{ error }` shape. */
+// Inbound WebSocket control messages (pause / cede / resume / human-action).
+const wsControlMessageSchema = z.object({
+  type: z.enum(["pause", "cede", "resume", "human-action"]),
+  runId: z.string().min(1),
+  operator: z.string().max(200).optional(),
+  detail: z.string().max(2000).optional(),
+})
+
 const invalidBody = (
   error: { issues: ReadonlyArray<{ message: string }> },
   c: Context
@@ -1174,13 +1182,13 @@ export const startEngineServer = (options: ServerOptions) => {
             typeof event.data === "string"
               ? event.data
               : new TextDecoder().decode(event.data)
-          const msg = JSON.parse(text) as {
-            type: string
-            runId?: string
-            operator?: string
-            detail?: string
-          }
-          if (!msg.runId) return
+          // Validate at the boundary — the control channel drives session
+          // ownership, so a malformed or type-confused frame must be dropped,
+          // never coerced. Mirrors the frontend ControlCommand contract
+          // (apps/frontend/lib/engine/ws.ts); unknown frames are ignored.
+          const parsed = wsControlMessageSchema.safeParse(JSON.parse(text))
+          if (!parsed.success) return
+          const msg = parsed.data
           if (msg.type === "pause") {
             const ok = pauseSession(msg.runId)
             broadcastControlState(msg.runId, ok)

@@ -1424,3 +1424,36 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** Owner's approval-run report; `apps/engine/src/replay.ts`
   (checkCheckpoint); engine DB `open_savings_sub_account@1.0.0`; D-051.
 
+### D-054 — 2026-09-09T12:40:00Z — Outcome detect rules substitute inputs; DB write boundaries redacted; WS control validated
+
+- **Status:** accepted
+- **Decision/change:** Completed the remaining same-class hardening from the
+  review sweep: (1) `detectBusinessOutcome` in `apps/engine/src/replay.ts`
+  now substitutes `{{input}}` placeholders in `urlPattern`/`visibleText`
+  detect rules at all three call sites — consistent with checkpoints
+  (D-053); a member-scoped outcome rule could never match before. (2)
+  **Redaction now happens at the DB persistence boundary** in
+  `apps/engine/src/db.ts`, not only at evidence/HTTP edges: `insertRun`
+  (goal, targetUrl), `finishRun` (structured result JSON),
+  `insertIntervention` (reason, context), and `resolveIntervention`
+  (decisionReason) all pass through `redactText` before write.
+  `approvalToken` stays exact-matchable (verified by
+  `findInterventionByToken`); it is single-use, short-lived, and masked by
+  `redactValue` on every response/evidence path instead of hashed at rest.
+  (3) **WS control channel inbound frames are zod-validated**
+  (`wsControlMessageSchema`: type enum + runId + bounded operator/detail)
+  — malformed or type-confused frames are dropped instead of coerced,
+  closing the bare-cast boundary the review flagged.
+- **Why:** Owner asked "are there more bugs like this?" — the sweep
+  confirmed stored artifacts are clean (no placeholders or pinned one-run
+  values in any checkpoint/detect rule, DB or /evidence) but found these
+  three code-level gaps in the same classes as the checkpoint regression.
+- **Consequences/follow-up:** Verified by execution: WS schema accepts
+  valid control frames and rejects unknown types/missing runId; root
+  format / lint / typecheck / build all pass. Screenshots (binary PNGs)
+  remain un-redactable pixel data — documented limitation, not a string
+  boundary; the correct fix is a "sensitive surface" policy flag that
+  skips screenshot persistence, deferred as follow-up.
+- **References:** Owner's sweep request; `apps/engine/src/replay.ts`;
+  `apps/engine/src/db.ts`; `apps/engine/src/server.ts`; D-053.
+

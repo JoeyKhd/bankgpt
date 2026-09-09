@@ -340,19 +340,22 @@ const checkCheckpoint = async (
 const detectBusinessOutcome = async (
   page: Page,
   artifact: CapabilityArtifact,
-  suppress: string[] = []
+  suppress: string[] = [],
+  inputs: ReplayInputs = {}
 ): Promise<{ code: string; detail: string } | undefined> => {
   for (const outcome of artifact.businessOutcomes) {
     if (suppress.includes(outcome.code)) continue
-    const urlOk = outcome.detect.urlPattern
-      ? new RegExp(outcome.detect.urlPattern).test(page.url())
-      : true
+    // Detect rules are part of the parameterized contract too — substitute
+    // {{input}} exactly like checkpoints (D-053), or a member-scoped detect
+    // rule can never match.
+    const detectUrl = outcome.detect.urlPattern
+      ? substitute(outcome.detect.urlPattern, inputs)
+      : undefined
+    const urlOk = detectUrl ? new RegExp(detectUrl).test(page.url()) : true
     let textOk = true
     if (outcome.detect.visibleText) {
-      textOk =
-        (await page
-          .getByText(outcome.detect.visibleText, { exact: false })
-          .count()) > 0
+      const detectText = substitute(outcome.detect.visibleText, inputs)
+      textOk = (await page.getByText(detectText, { exact: false }).count()) > 0
     }
     if (urlOk && textOk) {
       return { code: outcome.code, detail: outcome.description }
@@ -688,7 +691,12 @@ export const replayCapability = async (
             // re-render): fail FAST instead of waiting out the checkpoint.
             // Unsuppressed — a checkpoint failure with a matching outcome is
             // the answer, same rule as the post-step failure path.
-            const early = await detectBusinessOutcome(page, artifact)
+            const early = await detectBusinessOutcome(
+              page,
+              artifact,
+              [],
+              inputs
+            )
             if (early) throw new BusinessOutcomeInterrupt(early)
             const res = await checkCheckpoint(page, step.checkpoint, inputs)
             if (!res.ok)
@@ -736,7 +744,8 @@ export const replayCapability = async (
         const outcome = await detectBusinessOutcome(
           page,
           artifact,
-          step.suppressOutcomes ?? []
+          step.suppressOutcomes ?? [],
+          inputs
         )
         if (outcome) {
           return {
@@ -753,7 +762,7 @@ export const replayCapability = async (
         // validation error re-render that fails the step's checkpoint). All
         // outcomes apply here — suppression only guards the healthy path —
         // and a legitimate answer wins over the step error.
-        const outcome = await detectBusinessOutcome(page, artifact)
+        const outcome = await detectBusinessOutcome(page, artifact, [], inputs)
         if (outcome) {
           evidence.logStep({
             runId: options.runId,

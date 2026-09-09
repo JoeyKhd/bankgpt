@@ -9,6 +9,8 @@
  */
 import Database from "better-sqlite3"
 import { createHash } from "node:crypto"
+
+import { redactText } from "@/policy"
 import { mkdirSync } from "node:fs"
 import { dirname } from "node:path"
 
@@ -261,10 +263,17 @@ export const setCapabilityReviewed = (
 }
 
 export const insertRun = (db: Database.Database, row: RunRow): void => {
+  // Redact at the persistence boundary: goals and target URLs are free text
+  // that may carry credential-shaped substrings; the DB must never hold them raw.
+  const safe = {
+    ...row,
+    goal: row.goal === null ? null : redactText(row.goal),
+    targetUrl: row.targetUrl === null ? null : redactText(row.targetUrl),
+  }
   db.prepare(
     `INSERT INTO runs (id, kind, capabilityId, status, goal, targetUrl, startedAt, finishedAt, result, evidenceDir)
      VALUES (@id, @kind, @capabilityId, @status, @goal, @targetUrl, @startedAt, @finishedAt, @result, @evidenceDir)`
-  ).run(row)
+  ).run(safe)
 }
 
 export const finishRun = (
@@ -275,7 +284,14 @@ export const finishRun = (
 ): void => {
   db.prepare(
     `UPDATE runs SET status = @status, finishedAt = @finishedAt, result = @result WHERE id = @id`
-  ).run({ id, status, finishedAt: new Date().toISOString(), result })
+  ).run({
+    id,
+    status,
+    finishedAt: new Date().toISOString(),
+    // Redact the structured result before it persists — outputs/observed text
+    // can carry secret/PII-shaped substrings from the page.
+    result: result === null ? null : redactText(result),
+  })
 }
 
 /** Flip a run's lifecycle status without finishing it (e.g. an
@@ -302,10 +318,20 @@ export const insertIntervention = (
   db: Database.Database,
   row: InterventionRow
 ): void => {
+  // Redact at the persistence boundary: context carries capability inputs
+  // and page state (member ids, typed values); reason is free text.
+  // approvalToken must stay exact-matchable (verified by
+  // findInterventionByToken) — it is single-use, short-lived, and masked by
+  // redactValue in every response/evidence path instead.
+  const safe = {
+    ...row,
+    reason: redactText(row.reason),
+    context: redactText(row.context),
+  }
   db.prepare(
     `INSERT INTO interventions (id, runId, kind, status, reason, context, createdAt, resolvedAt, requestedBy, decidedBy, decisionReason, approvalToken, consumedByRunId)
      VALUES (@id, @runId, @kind, @status, @reason, @context, @createdAt, @resolvedAt, @requestedBy, @decidedBy, @decisionReason, @approvalToken, @consumedByRunId)`
-  ).run(row)
+  ).run(safe)
 }
 
 export const getIntervention = (
@@ -346,7 +372,9 @@ export const resolveIntervention = (
     status,
     resolvedAt: new Date().toISOString(),
     decidedBy: decision?.decidedBy ?? null,
-    decisionReason: decision?.decisionReason ?? null,
+    decisionReason: decision?.decisionReason
+      ? redactText(decision.decisionReason)
+      : null,
     approvalToken: decision?.approvalToken ?? null,
   })
 }
