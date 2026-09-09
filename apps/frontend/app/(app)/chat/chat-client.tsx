@@ -152,11 +152,17 @@ const sendAutomaticallyWhen = ({ messages }: { messages: UIMessage[] }) => {
     )
 }
 
-export const ChatClient = () => {
-  // Engine lifecycle broadcasts (intervention raised/decided, run finished)
-  // invalidate the matching queries — the approval card flips the moment an
-  // operator decides instead of waiting for the next poll.
+// Engine lifecycle broadcasts (intervention raised/decided, run finished)
+// invalidate the matching queries — the approval card flips the moment an
+// operator decides instead of waiting for the next poll. Rendered as an
+// inner component because the hook needs the query client, which
+// EngineProviders only supplies to its CHILDREN.
+const EngineEventInvalidation = () => {
   useEngineEventInvalidation()
+  return null
+}
+
+export const ChatClient = () => {
   const runtime = useRemoteThreadListRuntime({
     adapter: threadListAdapter,
     runtimeHook: function useChatThreadRuntime() {
@@ -213,6 +219,7 @@ export const ChatClient = () => {
 
   return (
     <EngineProviders>
+      <EngineEventInvalidation />
       <AssistantRuntimeProvider runtime={runtime} config={config}>
         <div className="flex h-dvh">
           <aside className="hidden w-64 shrink-0 flex-col border-r border-white/6 bg-card/40 sm:flex">
