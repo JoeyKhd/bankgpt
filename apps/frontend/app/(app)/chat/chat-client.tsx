@@ -162,14 +162,14 @@ export const ChatClient = () => {
       },
       {
         title: "Look up a member",
-        label: "Member 12345 balances",
-        prompt: "Look up member 12345 and read their current balances.",
+        label: "Member 100231 balances",
+        prompt: "Look up member 100231 and read their current balances.",
       },
       {
         title: "Open a sub-account",
         label: "Needs approval",
         prompt:
-          "Open a savings sub-account for member 12345 with an initial deposit of $250.",
+          "Open a savings sub-account for member 100231 with an initial deposit of $250.",
       },
     ]),
   })

@@ -1360,3 +1360,33 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `apps/engine/src/replay.ts` (toLocator); `apps/engine/src/discovery.ts`;
   `apps/frontend/lib/engine/schemas.ts`; D-049.
 
+### D-052 — 2026-09-09T12:05:00Z — One review flag, kept in sync; approval card wording; seeded chat suggestions
+
+- **Status:** accepted
+- **Decision/change:** (1) **Review state now lives in BOTH stores, kept
+  consistent.** `setCapabilityReviewed` syncs the embedded
+  `artifact.reviewed` alongside the SQL column, and `insertCapability`'s
+  review-preserving sync writes both too. The replay + approvals gates read
+  the artifact JSON; the catalog reads the column — letting them drift (as
+  `open_savings_sub_account@1.0.0` did: column reviewed=1, artifact
+  reviewed=false) meant the UI showed a reviewed capability while the engine
+  409'd its approval request, so no intervention ever reached the inbox.
+  The local dev DB row was healed; the graded evidence rows were already
+  consistent. (2) **Approval card wording**: the chat's waiting state now
+  says the request is BEING raised in the Interventions inbox (Console →
+  Interventions) and that a failed request replaces the card with the error —
+  the previous wording asserted the request already existed. (3) **Chat
+  suggestions use seeded member 100231** instead of the never-seeded 12345
+  (which always answered member_not_found).
+- **Why:** Owner report — the chat claimed an approval was pending, but
+  Console → Interventions was empty because the engine rejected the request
+  at the review gate (409), and the UI copy hid that failure mode.
+- **Consequences/follow-up:** Verified by execution: both risky artifacts
+  (open_sub_account, open_savings_sub_account) now pass the review gate with
+  column and artifact flag consistent; root format / lint / typecheck /
+  build all pass. The catalog still shows both ids for the same flow
+  (open_sub_account is canonical); consolidating them is a data-migration
+  decision for the owner, not done here.
+- **References:** Owner's Interventions report; `apps/engine/src/db.ts`;
+  `apps/frontend/app/(app)/chat/toolkit.tsx`; `chat-client.tsx`; D-049, D-051.
+

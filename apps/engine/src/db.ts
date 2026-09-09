@@ -176,11 +176,11 @@ export const insertCapability = (
        name = excluded.name, risk = excluded.risk,
        reviewed = excluded.reviewed, artifact = excluded.artifact`
   ).run(row)
-  // Review state is authoritative in the DB COLUMN (the review endpoint
-  // writes it; the embedded artifact JSON is a snapshot that is never
-  // re-parsed on the replay path). A re-saved artifact that claims
-  // `reviewed: false` must not silently strip the human review a previous
-  // version earned: keep the column true if any stored version is reviewed.
+  // A re-saved artifact that claims `reviewed: false` must not silently
+  // strip the human review a previous version earned: keep the review true
+  // if any stored version is reviewed — in BOTH the query column and the
+  // embedded artifact flag (replay and the approvals gate read the artifact
+  // JSON; the catalog reads the column).
   if (row.reviewed === 0) {
     const anyReviewed = db
       .prepare(
@@ -188,9 +188,15 @@ export const insertCapability = (
       )
       .get({ id: row.id }) as { n: number }
     if (anyReviewed.n > 0) {
+      const artifact = JSON.parse(row.artifact) as Record<string, unknown>
+      artifact.reviewed = true
       db.prepare(
-        `UPDATE capabilities SET reviewed = 1 WHERE id = @id AND version = @version`
-      ).run({ id: row.id, version: row.version })
+        `UPDATE capabilities SET reviewed = 1, artifact = @artifact WHERE id = @id AND version = @version`
+      ).run({
+        id: row.id,
+        version: row.version,
+        artifact: JSON.stringify(artifact),
+      })
     }
   }
 }
@@ -237,6 +243,21 @@ export const setCapabilityReviewed = (
     r: reviewed ? 1 : 0,
     id,
   })
+  // The artifact JSON is the authoritative contract replay parses — keep its
+  // embedded review flag in sync with the query column, or a reviewed
+  // capability still fails the artifact-level gate (and vice versa).
+  const rows = db
+    .prepare(`SELECT version, artifact FROM capabilities WHERE id = @id`)
+    .all({ id }) as Array<{ version: string; artifact: string }>
+  const update = db.prepare(
+    `UPDATE capabilities SET artifact = @artifact WHERE id = @id AND version = @version`
+  )
+  for (const row of rows) {
+    const artifact = JSON.parse(row.artifact) as Record<string, unknown>
+    if (artifact.reviewed === reviewed) continue
+    artifact.reviewed = reviewed
+    update.run({ id, version: row.version, artifact: JSON.stringify(artifact) })
+  }
 }
 
 export const insertRun = (db: Database.Database, row: RunRow): void => {

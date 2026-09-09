@@ -303,11 +303,13 @@ const WaitingForOperator = ({
       </span>
     </div>
     <p className="text-xs leading-relaxed text-muted-foreground">
-      This capability performs a consequential action. A request was raised with
-      your inputs and is now in the{" "}
-      <span className="font-medium text-foreground">Interventions</span> inbox,
-      where a different operator approves or rejects it. You cannot approve your
-      own request. The run starts automatically once approved.
+      This capability performs a consequential action. A request is being raised
+      with your inputs in the{" "}
+      <span className="font-medium text-foreground">Interventions</span> inbox
+      (Console → Interventions), where a different operator approves or rejects
+      it. You cannot approve your own request. The run starts automatically once
+      approved — and if the request itself fails, this card is replaced by the
+      error.
     </p>
     {Object.keys(inputs).length > 0 && <InputsTable inputs={inputs} />}
   </div>
