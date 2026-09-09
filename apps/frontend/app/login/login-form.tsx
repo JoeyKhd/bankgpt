@@ -11,8 +11,8 @@ import { authClient } from "@/lib/auth-client"
 
 type Mode = "sign-in" | "sign-up"
 
-// Minimal email + password auth for the operator console. First registered
-// user becomes the admin (see context/thought-process.md D-022).
+// Minimal email + password auth for the operator console. Every new account
+// becomes an admin (see context/thought-process.md D-055).
 export const LoginForm = () => {
   const router = useRouter()
   const [mode, setMode] = useState<Mode>("sign-in")
@@ -64,7 +64,7 @@ export const LoginForm = () => {
           <p className="text-sm text-muted-foreground">
             {mode === "sign-in"
               ? "Sign in to operate capabilities and runs."
-              : "Create the first operator account — it becomes the admin."}
+              : "Create an account — every signup gets admin access."}
           </p>
         </div>
       </div>

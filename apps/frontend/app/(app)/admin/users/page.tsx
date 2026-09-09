@@ -19,8 +19,8 @@ export default async function UsersPage() {
       <div className="flex flex-col gap-1.5">
         <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Operator accounts. The first registered user is the admin; admins can
-          promote or demote others (D-022).
+          User accounts. Every new signup is an admin; admins can demote others
+          to operator (D-055).
         </p>
       </div>
       <UsersTable users={users} currentUserId={session!.user.id} />

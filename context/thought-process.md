@@ -1457,3 +1457,29 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** Owner's sweep request; `apps/engine/src/replay.ts`;
   `apps/engine/src/db.ts`; `apps/engine/src/server.ts`; D-053.
 
+### D-055 — 2026-09-09T12:07:54Z — Every signup is an admin
+
+- **Status:** accepted
+- **Decision/change:** The first-user-admin bootstrap rule from D-022 is
+  removed: every new signup gets the `admin` role. Implemented in
+  `apps/frontend/lib/auth.ts` by dropping the custom
+  `databaseHooks.user.create.before` count-based hook and setting the
+  better-auth admin plugin's `defaultRole` to `"admin"`. The `operator`
+  role stays defined so admins can still demote an account; the `/admin`
+  guards and `isAdmin` are unchanged. Login-page and Users-page copy
+  updated to match.
+- **Why:** Project owner direction: "every user that signs up [should] be
+  an admin, not only the first one." The deployment is a single-tenant
+  demo console, so a per-instance bootstrap owner is unnecessary friction.
+- **Consequences/follow-up:** Supersedes the role-assignment part of D-022
+  and the "role rule unchanged" note in D-024; D-022's `/admin` boundary
+  and the two-role model still stand. Every signed-up user can now manage
+  users, safety policy, and system settings — fine for the assignment demo,
+  but a real multi-user deployment should reintroduce a bootstrap rule or
+  invite-only signup. Existing `operator` rows in a local SQLite DB are
+  unaffected; only new signups change. Verified against installed
+  better-auth 1.7.3: the admin plugin applies `defaultRole` in its own
+  `user.create.before` hook, so no custom hook is needed.
+- **References:** Project owner's message; `apps/frontend/lib/auth.ts`;
+  D-022, D-024.
+

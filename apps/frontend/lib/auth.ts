@@ -23,35 +23,21 @@ export const auth = betterAuth({
         admin: accessControl.newRole(adminAc.statements),
         operator: accessControl.newRole({ user: [] }),
       },
-      defaultRole: "operator",
+      // Every signup is an admin (D-055 supersedes the first-user rule from
+      // D-022); "operator" stays defined so admins can demote an account.
+      defaultRole: "admin",
       adminRoles: ["admin"],
     }),
   ],
   user: {
     additionalFields: {
-      // "admin" | "operator" — see context/thought-process.md D-022.
+      // "admin" | "operator" — see context/thought-process.md D-022 / D-055.
       role: {
         type: "string",
-        // Nullable so existing rows migrate cleanly; the create hook and the
-        // admin plugin always set it for new users (D-022).
+        // Nullable so existing rows migrate cleanly; the admin plugin sets
+        // defaultRole for every new user (D-055).
         required: false,
         input: false,
-      },
-    },
-  },
-  databaseHooks: {
-    user: {
-      create: {
-        // First registered user is always the admin (D-022): whoever deploys
-        // and signs up first owns the instance. Everyone after is an operator.
-        before: async (user, ctx) => {
-          const existing = ctx
-            ? await ctx.context.adapter.count({ model: "user" })
-            : 0
-          return {
-            data: { ...user, role: existing === 0 ? "admin" : "operator" },
-          }
-        },
       },
     },
   },
