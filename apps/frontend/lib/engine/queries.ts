@@ -269,7 +269,11 @@ export const sessionStateQuery = (runId: string) =>
   queryOptions({
     queryKey: engineKeys.sessionState(runId),
     queryFn: () => fetchSessionState(runId),
-    retry: false,
+    // One retry absorbs a transient miss; the error state only settles after
+    // two failed attempts, so the take-over panel never flashes its closed
+    // state on a single dropped poll.
+    retry: 1,
+    retryDelay: 1500,
     refetchInterval: 2500,
   })
 

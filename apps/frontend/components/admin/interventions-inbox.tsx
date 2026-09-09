@@ -331,12 +331,28 @@ const TakeoverPanel = ({
   const owner = control?.owner ?? session?.owner ?? "automation"
   const paused = control?.paused ?? session?.paused ?? false
   const humanOwns = owner === "human"
-  const sessionGone =
+
+  // The session endpoint flips 200 → "no live session" the moment the run
+  // ends. Declaring the session gone off a single poll makes the whole live
+  // view unmount and the empty state mount in one frame (a visible flicker),
+  // and a transient miss would false-trigger it. Delay the swap by one poll
+  // cycle: the query keeps the last good data on error, so the live view
+  // holds its frame until the closure is confirmed, then swaps once.
+  const isNoSessionError =
     stateQuery.isError &&
     !isEngineOffline(stateQuery.error) &&
     engineErrorMessage(stateQuery.error)
       .toLowerCase()
       .includes("no live session")
+  const [closedConfirmedFor, setClosedConfirmedFor] = useState<string | null>(
+    null
+  )
+  useEffect(() => {
+    if (!isNoSessionError || !runId) return
+    const timer = setTimeout(() => setClosedConfirmedFor(runId), 2500)
+    return () => clearTimeout(timer)
+  }, [isNoSessionError, runId])
+  const sessionGone = isNoSessionError && closedConfirmedFor === runId
 
   const sendControl = (type: "pause" | "cede" | "resume") => {
     controlRef.current?.send({
@@ -454,12 +470,18 @@ const TakeoverPanel = ({
         </div>
       </div>
 
-      {sessionGone && (
-        <EmptyState
-          title="Live session closed"
-          hint="The run finished and its browser session was torn down. The control log and human actions are preserved in the run evidence."
-        />
-      )}
+      {sessionGone &&
+        (intervention.status === "pending" ? (
+          <EmptyState
+            title="Waiting for a decision"
+            hint="This intervention is still awaiting approval — the run's live session starts once an operator approves it."
+          />
+        ) : (
+          <EmptyState
+            title="Live session closed"
+            hint="The run finished and its browser session was torn down. The control log and human actions are preserved in the run evidence."
+          />
+        ))}
 
       {!sessionGone && (
         <>
@@ -642,6 +664,25 @@ const StuckCard = ({
   sessionEmail: string | undefined
 }) => {
   const context = intervention.context
+  const queryClient = useQueryClient()
+  const [dismissError, setDismissError] = useState<string | null>(null)
+  // Dismissing rejects the intervention AND aborts the run's handoff wait —
+  // otherwise the paused run (and its browser session) would hang until the
+  // engine's handoff timeout, ~20 minutes.
+  const dismiss = useMutation({
+    mutationFn: () =>
+      rejectIntervention(intervention.id, { reason: "dismissed by operator" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["engine", "interventions"],
+      })
+      void queryClient.invalidateQueries({ queryKey: ["engine", "runs"] })
+    },
+    onError: (failure) =>
+      setDismissError(
+        failure instanceof Error ? failure.message : String(failure)
+      ),
+  })
   return (
     <div className="flex flex-col gap-4 rounded-2xl border border-violet-400/20 bg-violet-400/[0.04] p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -654,8 +695,28 @@ const StuckCard = ({
         <div className="flex items-center gap-2">
           <KindPill kind={intervention.kind} />
           <StatusPill status={intervention.status} />
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-full"
+            disabled={dismiss.isPending}
+            onClick={() => dismiss.mutate()}
+          >
+            {dismiss.isPending ? (
+              <Loader2Icon className="size-4 animate-spin" />
+            ) : (
+              <CircleSlashIcon className="size-4" />
+            )}
+            Dismiss run
+          </Button>
         </div>
       </div>
+
+      {dismissError && (
+        <p className="text-xs text-red-300" role="alert">
+          {dismissError}
+        </p>
+      )}
 
       <div className="grid gap-1.5 rounded-lg border border-white/8 bg-white/[0.02] p-3">
         {context.capabilityId && (
