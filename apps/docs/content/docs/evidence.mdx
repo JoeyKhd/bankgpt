@@ -1,0 +1,62 @@
+---
+title: Evidence & storage
+description: Where step logs, transcripts, screenshots, and artifacts live — the engine SQLite DB.
+---
+
+Every run (discovery or replay) leaves a complete, redacted audit trail.
+Evidence lives in the engine's own SQLite database
+(`apps/engine/data/engine.sqlite`, override with `ENGINE_DB_PATH`) —
+separate from the frontend auth DB — so nothing touches the filesystem and
+everything is served back over the engine HTTP API.
+
+## What a run stores
+
+One row per file in the `run_files` table, keyed by `(runId, name)`:
+
+| File | Contents |
+| ---- | -------- |
+| `steps.jsonl` | One redacted JSON object per step: action, target, the model's/recorded **reason**, duration, and result. The canonical step store. |
+| `transcript.json` | The full model transcript (discovery only), redacted. What makes a discovery run verifiable as genuine. |
+| `result.json` | The final structured run result, redacted. |
+| `control.json` | The session ownership log (runs with a live session): every pause/cede/resume and human action. |
+| `failure-step-N.png` / `.yml` | Screenshot + accessibility snapshot captured when step N failed. |
+| `handoff-step-N.*` | The same capture when a stuck run escalates to a human. |
+
+Approval and dialog steps are logged inline in `steps.jsonl` (with step
+index `-1` for approvals), so the decision trail — who approved, what the
+model saw, why it acted — is complete in one place.
+
+## Redaction
+
+Everything written passes through policy redaction first. `redactText` /
+`redactValue` scrub credential-shaped and PII-shaped substrings before
+anything is persisted, and every JSON response leaves the engine through
+the same redaction. Secrets and PII never reach an artifact, a run log, or
+a screenshot caption.
+
+## The schema
+
+| Table | Contents |
+| ----- | -------- |
+| `capabilities` | One row per stored artifact **version**: `id`, `version`, `name`, `risk`, `reviewed`, `createdAt`, and the full artifact JSON. |
+| `runs` | One row per run: `id`, `kind` (discovery/replay), `capabilityId`, `status`, `goal`, `targetUrl`, timestamps, and the structured result JSON. |
+| `interventions` | Approval and stuck requests: kind, status, reason, context, `requestedBy` / `decidedBy`, the approval token, and the consuming run. |
+| `run_files` | Evidence blobs keyed by `(runId, name)`. |
+
+Rows store validated JSON documents as TEXT and evidence as BLOBs;
+querying happens on a few indexed columns only. This keeps the schema
+small and the artifact schema (`artifact.ts`) the single source of truth
+for shape.
+
+## Reading evidence back
+
+Over the engine API:
+
+```bash
+curl http://127.0.0.1:4011/runs/<runId>/evidence          # parsed step log
+curl http://127.0.0.1:4011/runs/<runId>/files             # list files
+curl http://127.0.0.1:4011/runs/<runId>/files/result.json # one file
+```
+
+or in the console at `/admin/runs/:id`, which renders the result, the step
+evidence, and the failure/handoff captures.

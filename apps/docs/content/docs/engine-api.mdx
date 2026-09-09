@@ -1,0 +1,89 @@
+---
+title: Engine API
+description: Every HTTP route and the WebSocket control channel the engine exposes on port 4011.
+---
+
+The engine exposes a Hono HTTP API plus a WebSocket control channel on one
+listener (default port `4011`). Every request body is validated with zod,
+every JSON response passes through policy redaction, and capabilities /
+runs / interventions persist in SQLite. The frontend never calls these
+routes from the browser over HTTP — a server-only typed client sits behind
+auth-gated `/api/engine/*` proxies — but the API is documented here for
+operators and for the CLI.
+
+## Health & policy
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| `GET` | `/health` | Liveness probe; returns engine status. |
+| `GET` | `/policy` | The active safety policy (allowlist, action sets, limits). |
+
+## Capabilities
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| `GET` | `/capabilities` | List every stored capability **version**, newest first. |
+| `GET` | `/capabilities/:id` | Fetch one capability row (latest version) with its full artifact. |
+| `POST` | `/capabilities` | Import a validated artifact (zod-checked against the schema). |
+| `POST` | `/capabilities/:id/review` | Mark an artifact `reviewed: true` and bump its version. |
+
+## Runs
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| `POST` | `/discover` | Start a discovery run. Body: `{ goal, targetUrl, model? }`. Returns `202` with the `runId`; follow progress on `/ws` or poll `/runs/:id`. |
+| `POST` | `/replay` | Start a replay run. Body: `{ capabilityId, inputs?, approvalToken?, requestedBy? }`. Risky capabilities require a valid approval token. |
+| `GET` | `/runs` | List all runs (discovery and replay). |
+| `GET` | `/runs/:id` | Fetch one run row with its structured result. |
+| `GET` | `/runs/:id/evidence` | The run's step log (`steps.jsonl` parsed to JSON). |
+| `GET` | `/runs/:id/files` | List the run's evidence files. |
+| `GET` | `/runs/:id/files/:name` | Download one evidence file (transcript, result, screenshot, snapshot, control log). |
+
+## Approvals & interventions
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| `GET` | `/approvals` | List interventions (approvals and stuck runs). |
+| `POST` | `/approvals` | Request an approval. Body: `{ capabilityId, inputs?, requestedBy, reason? }`. Returns the intervention and an approval token. |
+| `GET` | `/approvals/:id` | Fetch one intervention. |
+| `POST` | `/approvals/:id/approve` | Approve. Body: `{ decidedBy, reason? }`. Auto-starts the run on the pinned artifact. |
+| `POST` | `/approvals/:id/reject` | Reject. Body: `{ decidedBy, reason? }`. |
+
+## Live sessions
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| `GET` | `/sessions/:runId/state` | Current ownership state (`owner`, `paused`, epoch). |
+| `GET` | `/sessions/:runId` | Alias for state. |
+| `POST` | `/sessions/:runId/action` | Drive the session during a take-over (click/type/navigate per the action body). |
+| `POST` | `/sessions/:runId` | Alias for the action endpoint. |
+
+## WebSocket control channel (`/ws`)
+
+The browser connects **directly** to the engine's `/ws` channel (Next.js
+route handlers cannot proxy WebSocket upgrades). The channel is a
+localhost trust boundary: it carries control messages and step events, not
+auth — operator identity flows through the authenticated HTTP proxy.
+
+**Server → client events:**
+
+| `type` | Payload | When |
+| ------ | ------- | ---- |
+| `hello` | `service`, `sessions` | On connect. |
+| `run-step` | `runId`, `stepIndex`, `action`, `intent`, `ok` | After each discovery/replay step. |
+| `run-finished` | `runId`, `result` | When a run completes. |
+| `control-state` | `runId`, `owner`, `paused`, `applied` | After a pause/cede/resume. |
+| `session-opened` / `session-closed` | `runId` | Live session lifecycle. |
+| `intervention-requested` / `intervention-resolved` | `interventionId`, `runId`, `status`, `decidedBy` | Approval/stuck lifecycle. |
+| `capability-saved` | capability id/version | Discovery distilled an artifact. |
+| `human-action` | `runId`, `detail` | A human acted during a take-over. |
+
+**Client → server commands** (validated at the boundary; malformed frames
+are dropped, never coerced):
+
+| `type` | Fields | Effect |
+| ------ | ------ | ------ |
+| `pause` | `runId` | Automation stops issuing actions. |
+| `cede` | `runId`, `operator?` | Control passes to the human. |
+| `resume` | `runId`, `operator?`, `detail?` | Control returns to automation; resolves pending stuck interventions for the run. |
+| `human-action` | `runId`, `detail` | Record a human action into the run evidence. |

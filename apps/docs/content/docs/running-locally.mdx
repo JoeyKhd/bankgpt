@@ -50,10 +50,14 @@ pnpm dev   # mockbank :4010 + engine :4011 + frontend :3000 + docs :3001
 ```
 
 Open `http://localhost:3000` and register — **the first registered user is
-the admin**. `/chat` is the caller simulation; `/admin` holds the
-capability catalog, run history, discovery form, and the interventions
-inbox with the live take-over panel. This docs site is at
-`http://localhost:3001`.
+the admin**.
+
+![Sign-in screen](/screenshots/login.png)
+
+`/chat` is the caller simulation; `/admin` holds the capability catalog,
+run history, discovery form, and the interventions inbox with the live
+take-over panel — see the [Operator console](/docs/operator-console) tour.
+This docs site is at `http://localhost:3001`.
 
 If you ever need one service on its own, use the per-app scripts
 (`pnpm --filter engine dev`, …) — but then do not also run `pnpm dev`, or
@@ -68,7 +72,9 @@ target first so counters and the transient-500 cadence are deterministic:
 curl -X POST http://127.0.0.1:4010/__reset__
 
 # 1. Genuine LLM-driven discovery (needs OPENROUTER_API_KEY)
-pnpm --filter engine discover   --goal "Log in to the teller console and read member 100231's savings and checking balances"   --target http://127.0.0.1:4010
+pnpm --filter engine discover \
+  --goal "Log in to the teller console and read member 100231's savings and checking balances" \
+  --target http://127.0.0.1:4010
 
 # 2. Deterministic replay (ZERO model calls; no API key needed)
 pnpm --filter engine replay --capability get_member_balances --input memberId=100231
@@ -79,4 +85,4 @@ Freshly distilled artifacts are `reviewed: false`; risky capabilities only
 replay after a human review pass marks them `reviewed: true` (safe
 capabilities replay unreviewed). Artifacts and run evidence are stored in
 the engine's SQLite DB (`apps/engine/data/engine.sqlite`) — see
-[Capabilities](./capabilities).
+[Capabilities](/docs/capabilities) and the [CLI](/docs/cli) reference.

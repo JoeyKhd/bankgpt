@@ -33,18 +33,88 @@ that is how the calling agent treats it.
   detect rules, so "no such member" is a legitimate answer the caller
   branches on, not a crash.
 
+## A real artifact
+
+This is the reviewed `get_member_balances` artifact (trimmed to its
+identity, I/O, and first two steps):
+
+```json
+{
+  "id": "get_member_balances",
+  "version": "1.2.1",
+  "name": "Get member savings and checking balances",
+  "risk": "safe",
+  "reviewed": true,
+  "discoveryModel": "google/gemini-2.5-flash",
+  "inputs": [
+    { "name": "tellerUsername", "type": "string", "required": false,
+      "description": "Teller console username (demo target accepts any credentials)" },
+    { "name": "tellerPassword", "type": "string", "required": false,
+      "description": "Teller console password (demo target accepts any credentials)" },
+    { "name": "memberId", "type": "string", "required": true,
+      "description": "Numeric ID of the member whose balances are read" }
+  ],
+  "outputs": [
+    { "name": "memberName", "type": "string",
+      "description": "The member's full name as shown on the detail page" },
+    { "name": "savingsBalance", "type": "string",
+      "description": "Balance of the member's savings account (e.g. $12,480.55)" },
+    { "name": "checkingBalance", "type": "string",
+      "description": "Balance of the member's checking account (e.g. $1,204.10)" }
+  ],
+  "steps": [
+    { "intent": "Open the teller console login page",
+      "action": "navigate", "url": "http://127.0.0.1:4010/login" },
+    { "intent": "Type the teller username",
+      "action": "type",
+      "target": {
+        "primary": { "strategy": "a11y", "role": "textbox", "name": "Username", "exact": true },
+        "fallbacks": [{ "strategy": "css", "css": "input[name=\"username\"]" }],
+        "robustness": "The label-owned textbox name 'Username' survives restyling; the input's form name is a stable fallback."
+      },
+      "input": "tellerUsername", "value": "{{tellerUsername}}" }
+  ],
+  "checkpoint": { "urlPattern": "/members/\\d+$", "visibleText": "Accounts" },
+  "businessOutcomes": [
+    { "code": "member_not_found",
+      "description": "No member exists with the requested ID — a legitimate answer, not a failure.",
+      "detect": { "visibleText": "No member found" } },
+    { "code": "session_expired",
+      "description": "The teller session ended from inactivity; log in again to continue.",
+      "detect": { "visibleText": "Session expired" } }
+  ]
+}
+```
+
+The console renders the same artifact for a reviewer:
+
+![Capability detail](/screenshots/admin-capability-detail.png)
+
+## Locator strategies
+
+Each step target is a strict discriminated union on `strategy`:
+
+| Strategy | Fields | When it is used |
+| -------- | ------ | --------------- |
+| `a11y`   | `role`, `name`, `exact` | **Primary.** The accessibility-tree identity of the element; survives restyling, theming, and markup churn. |
+| `css`    | `css` | First fallback — a stable form name or structural selector. |
+| `text`   | `text`, `exact` | Last resort — visible text (exact or substring). |
+
+Replay tries the primary locator first, then the fallbacks **in recorded
+order** (never a DOM-ordered union), with explicit waits.
+
 ## The review gate
 
 Discovery stamps artifacts `1.0.0` with `reviewed: false`. A documented
-human review pass fixes the distiller's first-draft semantics (the
-distiller is a good drafter, not a finisher) before `reviewed: true` and a
-version bump.
+human review pass fixes the distiller's first-draft semantics before
+`reviewed: true` and a version bump.
 
 - **Safe** capabilities replay unreviewed.
 - **Risky** capabilities refuse to replay until the artifact is
   `reviewed: true`, and server-invoked risky runs raise an **operator
   approval** with maker ≠ checker segregation — the operator who requested
-  the run cannot approve it.
+  the run cannot approve it (same-person decisions are recorded and
+  flagged as `self-approved`, not blocked, so single-account demos work).
 
 ## Handoff when automation gets stuck
 
@@ -52,8 +122,10 @@ If replay stalls, a human operator takes over the **same live session**
 through the interventions inbox, acts in the browser directly, and hands
 control back to the automation. Ownership transfer is explicit over the
 engine's WebSocket control channel — the artifact keeps no hidden state.
+See [Approvals & handoff](/docs/approvals).
 
 Artifacts live in the engine's `capabilities` table; every discovery and
 replay run's step log, transcript, and failure/handoff screenshots are
 stored as blobs in the engine SQLite DB (`run_files` table) and served over
 the engine HTTP API at `/runs/:id/evidence` and `/runs/:id/files[/:name]`.
+See [Evidence & storage](/docs/evidence).

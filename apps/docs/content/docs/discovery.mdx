@@ -1,0 +1,87 @@
+---
+title: Discovery
+description: How the LLM drives a live browser to learn a flow — the observe → decide → act loop, distillation, and stop conditions.
+---
+
+Discovery is the only phase that uses a model. Given a natural-language
+goal and a target URL, the engine drives a live Chromium until the goal is
+reached, then distills the successful trajectory into a typed capability
+artifact. Everything the model does is bounded by the safety policy and
+recorded as evidence.
+
+## The loop
+
+Each iteration is one structured model call:
+
+1. **Observe** — the page's accessibility-tree YAML
+   (`page.ariaSnapshot()`) plus a screenshot for situational awareness.
+   The a11y tree is preferred over markup because it survives restyling,
+   theming, and markup churn — exactly the drift expected across tenants
+   that share a vendor product.
+2. **Decide** — one AI SDK `generateText` call with `Output.object`
+   against a fixed zod action vocabulary. The model returns the next
+   action, or `done` / `stuck` with a reason. It cannot invent actions
+   outside the vocabulary.
+3. **Act** — the engine executes the action through Playwright with
+   `getByRole` semantics and captures the locators the model named (a11y
+   primary + css/text fallbacks) so the distiller can bind every step to a
+   robust target.
+
+The action vocabulary is: `navigate`, `click`, `type`, `select`, `press`,
+`wait`, `extract`, plus the two loop-control signals `done` and `stuck`.
+
+## Stop conditions
+
+The loop ends when any of these fires:
+
+- the model reports the goal met (`done`),
+- the model reports a dead end (`stuck`),
+- the step limit fires (`maxDiscoverySteps`, default **24**),
+- the wall-clock timeout fires (`discoveryTimeoutMs`, default **180 s**).
+
+## Distillation
+
+On success a final structured model call distills the transcript into a
+capability artifact:
+
+- **inputs** are inferred from the values the model typed (a typed member
+  ID becomes a `memberId` input with a `{{memberId}}` placeholder),
+- the **checkpoint** is proposed by the model (URL pattern and/or visible
+  text that proves the flow arrived),
+- the **risk class** is proposed by the model and left `reviewed: false`,
+- the artifact is stamped `1.0.0` with `discoveryModel` and
+  `discoveryRunId` so it audits back to this run.
+
+The distiller is a good drafter, not a finisher — a human review pass
+(see [Capabilities](/docs/capabilities)) fixes first-draft semantics
+before the artifact is trusted.
+
+## Policy during discovery
+
+Discovery is not a free-roam agent. Before every navigation and every
+action the engine asserts the URL is inside the allowlisted scope and the
+action is permitted; risky steps require an approval token. Browser-native
+dialogs (`window.confirm` / `alert` / `prompt`) are answered per the
+policy's `dialogHandling` and logged to the run evidence.
+
+## Evidence
+
+Every model message and every executed step is persisted. A discovery run
+stores `steps.jsonl`, the full redacted `transcript.json`, and
+`result.json` — the transcript is what makes the run verifiable as
+**genuine** rather than a scripted replay. See
+[Evidence & storage](/docs/evidence).
+
+## Running a discovery
+
+From the CLI (the graded path):
+
+```bash
+pnpm --filter engine discover \
+  --goal "Log in to the teller console and read member 100231's savings and checking balances" \
+  --target http://127.0.0.1:4010
+```
+
+or from the console at `/admin/discover`. Discovery requires
+`OPENROUTER_API_KEY`; the default model is `google/gemini-2.5-flash`
+(override with `--model`).

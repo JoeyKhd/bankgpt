@@ -1,4 +1,18 @@
 {
   "title": "BankGPT Automation",
-  "pages": ["index", "running-locally", "architecture", "capabilities"]
+  "pages": [
+    "index",
+    "running-locally",
+    "operator-console",
+    "architecture",
+    "discovery",
+    "capabilities",
+    "replay",
+    "approvals",
+    "engine-api",
+    "cli",
+    "mockbank",
+    "evidence",
+    "troubleshooting"
+  ]
 }

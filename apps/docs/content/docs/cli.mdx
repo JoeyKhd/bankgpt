@@ -1,0 +1,70 @@
+---
+title: CLI
+description: The graded demo path — discover and replay from the terminal.
+---
+
+The engine CLI (`apps/engine/src/cli.ts`) is the demo entrypoint from the
+assignment README. Both commands print structured JSON to stdout and read
+/ write artifacts in the engine DB (`apps/engine/data/engine.sqlite`,
+override with `ENGINE_DB_PATH`).
+
+## discover
+
+```bash
+pnpm --filter engine discover \
+  --goal "Log in to the teller console and read member 100231's savings and checking balances" \
+  --target http://127.0.0.1:4010
+```
+
+Runs a genuine LLM-driven discovery against the target. Requires
+`OPENROUTER_API_KEY` in the environment (the package scripts load it from
+`apps/engine/.env.local`). On success the distilled artifact is inserted
+into the `capabilities` table with `reviewed: 0`, and the command prints
+`{ runId, savedArtifactId, result }`.
+
+Flags:
+
+| Flag | Required | Description |
+| ---- | -------- | ----------- |
+| `--goal` | yes | Natural-language goal for the flow. |
+| `--target` | yes | Base URL of the target app. |
+| `--model` | no | Override the discovery model (default `google/gemini-2.5-flash`). |
+
+## replay
+
+```bash
+pnpm --filter engine replay \
+  --capability get_member_balances \
+  --input memberId=100231
+```
+
+Loads the artifact from the `capabilities` table and replays it
+deterministically — **zero model calls**, no API key needed. CLI replay is
+operator-invoked, so the approval is implicit (`approved: true`). Prints
+`{ runId, result }` where `result` is one of the four
+[run results](/docs/replay).
+
+Flags:
+
+| Flag | Required | Description |
+| ---- | -------- | ----------- |
+| `--capability` | yes | The artifact id to replay. |
+| `--input` | per input | `key=value` for each declared input (repeatable). |
+
+## Resetting the demo target
+
+The graded demo needs deterministic counters and transient-500 cadence, so
+reset the mockbank first:
+
+```bash
+curl -X POST http://127.0.0.1:4010/__reset__
+```
+
+## Notes
+
+- Freshly distilled artifacts are `reviewed: false`; **risky** capabilities
+  only replay after a human review pass marks them `reviewed: true` (safe
+  capabilities replay unreviewed).
+- Every CLI run stores its evidence (`steps.jsonl`, `transcript.json` for
+  discovery, `result.json`, failure screenshots) in the engine DB — see
+  [Evidence & storage](/docs/evidence).

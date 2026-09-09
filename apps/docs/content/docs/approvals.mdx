@@ -1,0 +1,92 @@
+---
+title: Approvals & handoff
+description: Maker ≠ checker approvals for risky runs, and the live take-over panel for stuck automation.
+---
+
+Two human-in-the-loop mechanisms keep automation safe without blocking it:
+**approvals** gate risky runs before they start, and **handoff** lets a
+human rescue a run that is already stuck. Both are explicit, recorded, and
+enforced by the engine — not by convention.
+
+## Approvals (maker ≠ checker)
+
+A risky capability never runs on the caller's authority alone. Invoking
+one (from the caller chat or the engine API) raises an **approval
+intervention** carrying the capability, its typed inputs, and
+`requestedBy`. A human operator approves or rejects with `decidedBy` and a
+reason; the run executes automatically once approved.
+
+Segregation is **recorded and flagged, not hard-blocked**: if the same
+account requests and decides, the intervention is marked `self-approved`
+so single-account demos still work, but the evidence always says who
+decided. In a multi-operator deployment the expectation is maker ≠
+checker.
+
+![Interventions inbox](/screenshots/admin-interventions.png)
+
+Approval tokens are:
+
+- **scoped** to one capability,
+- **single-use** (consumed by exactly one run),
+- **pinned** to the artifact version and content hash the request carried,
+  so an operator never approves a run of a mutated or replaced artifact.
+
+The engine's enforcement point is `requireApproval`: every risky execution
+path calls it first, in both discovery and replay.
+
+## Handoff (take over the same live session)
+
+When replay cannot satisfy a step checkpoint, it raises a **stuck
+intervention** and pauses. A human operator opens the interventions inbox,
+takes over the **same live browser session** through the take-over panel,
+acts in the browser directly, and hands control back. The automation
+resumes from where it blocked — no restart, no hidden state.
+
+Ownership is an explicit state machine over the engine's WebSocket control
+channel:
+
+```
+automation ──cede──▶ human ──resume──▶ automation
+     │                                  ▲
+     └──────────── pause ───────────────┘
+```
+
+- `pause` — automation stops issuing actions (control stays `automation`)
+- `cede` — control passes to a human operator; automation blocks
+- `resume` — control returns; automation continues
+
+Runs that may need handoff await `waitWhileNotAutomation()` before each
+action, and every ownership change increments an epoch so a stale
+automation aborts instead of acting on a session it no longer owns. Human
+actions are recorded into the run's evidence (`steps.jsonl` +
+`control.json`). A handoff has a timeout (`handoffTimeoutMs`, default
+**20 min**) so a forgotten take-over fails the run cleanly instead of
+holding a browser forever.
+
+## The safety policy
+
+The policy (`apps/engine/src/policy.ts`) is the engine's guardrail set,
+viewable at `/admin/policy`:
+
+![Safety policy](/screenshots/admin-policy.png)
+
+| Field | Default | What it controls |
+| ----- | ------- | ---------------- |
+| `allowedUrlPatterns` | localhost / 127.0.0.1 | Regexes the current page URL must match before any action. |
+| `allowedActions` | all 7 step actions | Action types the agent may execute. |
+| `safeActions` | all 7 step actions | Actions treated as safe/reversible; anything allowed but not here is risky. |
+| `riskyClassesRequireApproval` | `["risky"]` | Capability risk classes that need an approval token. |
+| `requireReviewForRisky` | `true` | Risky artifacts must be `reviewed: true` before replay. |
+| `maxDiscoverySteps` | `24` | Discovery loop step limit. |
+| `discoveryTimeoutMs` | `180000` | Discovery wall-clock timeout. |
+| `dialogHandling` | `accept` | How native `confirm`/`alert`/`prompt` dialogs are answered. |
+| `transientErrorMaxReloads` | `3` | Reloads per transient server-error page. |
+| `handoffTimeoutMs` | `1200000` | How long a run waits for a human take-over. |
+
+## Redaction
+
+Secrets and PII-shaped values never persist into artifacts, run logs, or
+evidence. `redactText` / `redactValue` scrub credential-shaped and
+PII-shaped substrings before anything is written, and every JSON response
+leaves the engine through redaction. See
+[Evidence & storage](/docs/evidence).

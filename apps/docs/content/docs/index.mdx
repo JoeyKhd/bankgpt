@@ -25,6 +25,8 @@ goal → discovery (model in the loop) → artifact (typed contract)
 
 with policy enforced and evidence captured at every step.
 
+![The BankGPT automation console overview](/screenshots/admin-overview.png)
+
 ## The system at a glance
 
 | App             | Role                                                                                     | Port |
@@ -34,18 +36,59 @@ with policy enforced and evidence captured at every step.
 | `apps/mockbank` | FinCore Teller — the deliberately hostile mock banking console used as the proxy target. | 4010 |
 | `apps/docs`     | This documentation site (Fumadocs).                                                      | 3001 |
 
+## Why it works this way
+
+- **Discovery once, replay forever.** Model calls are expensive,
+  nondeterministic, and unauditable. They happen exactly once per flow; the
+  recorded artifact is what runs in production.
+- **The artifact is the contract.** Human reviewers read it, the replay
+  executor interprets it, and the calling agent treats it as a typed
+  function signature. One zod schema is the single source of truth.
+- **Humans stay in the loop.** Risky capabilities refuse to run without a
+  segregated operator approval, and a stuck run hands the *same live
+  browser session* to a human and back — no restart, no hidden state.
+- **Every run leaves evidence.** Step logs, model transcripts, failure
+  screenshots, and the control log are stored per run and served back over
+  the engine API.
+
 ## Where to next
 
 <Cards>
   <Card title="Running locally" href="/docs/running-locally">
     One command starts the whole demo — install, environment, and ports.
   </Card>
+  <Card title="Operator console" href="/docs/operator-console">
+    A screenshot tour of every admin screen and the caller chat.
+  </Card>
   <Card title="Architecture" href="/docs/architecture">
     Three processes with explicit boundaries and the discovery → artifact →
     replay loop.
   </Card>
+  <Card title="Discovery" href="/docs/discovery">
+    How the LLM drives a live browser and what happens per step.
+  </Card>
   <Card title="Capabilities" href="/docs/capabilities">
-    The artifact contract and the review/approval gate that guards risky
-    actions.
+    The artifact contract and the review gate that guards risky actions.
+  </Card>
+  <Card title="Replay & results" href="/docs/replay">
+    Deterministic execution, typed inputs, and the four run outcomes.
+  </Card>
+  <Card title="Approvals & handoff" href="/docs/approvals">
+    Maker ≠ checker approvals and the live take-over panel.
+  </Card>
+  <Card title="Engine API" href="/docs/engine-api">
+    Every HTTP route and the WebSocket control channel.
+  </Card>
+  <Card title="CLI" href="/docs/cli">
+    The graded demo path: `discover` and `replay` from the terminal.
+  </Card>
+  <Card title="Mockbank target" href="/docs/mockbank">
+    FinCore Teller — the deliberately hostile proxy application.
+  </Card>
+  <Card title="Evidence & storage" href="/docs/evidence">
+    Where step logs, transcripts, and screenshots live.
+  </Card>
+  <Card title="Troubleshooting" href="/docs/troubleshooting">
+    Ports, approvals, evidence, and engine-offline symptoms.
   </Card>
 </Cards>

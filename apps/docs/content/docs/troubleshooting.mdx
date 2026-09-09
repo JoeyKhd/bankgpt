@@ -1,0 +1,79 @@
+---
+title: Troubleshooting
+description: Ports, approvals, evidence, and engine-offline symptoms.
+---
+
+## The admin console shows "engine offline"
+
+The frontend proxies to `ENGINE_URL` (default `http://127.0.0.1:4011`) and
+the browser opens the control channel at `NEXT_PUBLIC_ENGINE_WS_URL`
+(default `ws://127.0.0.1:4011/ws`). If the engine binds a different port
+(`ENGINE_PORT` in `apps/engine/.env.local`), set **both** frontend
+variables to match. A mismatch shows up as the "engine offline" banner and
+a dead live-session channel. Start the engine with
+`pnpm --filter engine dev`, or start everything with `pnpm dev` from the
+root.
+
+## A risky capability refuses to replay
+
+Two gates apply, in order:
+
+1. The artifact must be `reviewed: true`. Freshly distilled artifacts are
+   `reviewed: false`; open the capability in `/admin/capabilities/:id` and
+   complete the review pass (this bumps the version).
+2. A server-invoked run needs an **approval token**. Invoke the capability
+   from the caller chat or `POST /approvals`, then have a *different*
+   operator approve it in `/admin/interventions`. Same-person decisions are
+   recorded as `self-approved` rather than blocked.
+
+CLI replay (`pnpm --filter engine replay`) is operator-invoked, so the
+approval is implicit — but the `reviewed: true` gate still applies.
+
+## Replay keeps hitting the transient 500
+
+That is the mockbank working as intended — it returns a transient HTTP 500
+every 7th authenticated GET. Replay retries transient server-error pages
+up to `transientErrorMaxReloads` (3) times, reloading before re-driving.
+If a graded run needs deterministic behavior, reset the target first:
+
+```bash
+curl -X POST http://127.0.0.1:4010/__reset__
+```
+
+## "Session expired" during a run
+
+The mockbank ends teller sessions after 5 minutes of inactivity. This is a
+legitimate `session_expired` **business outcome**, not a crash — the
+caller branches on it. Long discovery runs should complete well inside the
+window; if a take-over holds a session past expiry, the run ends with the
+outcome and a fresh run re-authenticates.
+
+## Discovery fails immediately
+
+Discovery needs `OPENROUTER_API_KEY`. Put it in `apps/engine/.env.local`
+(the engine dev script loads it via `--env-file-if-exists`) or export it
+before running the CLI. Replay never needs the key.
+
+## Sign-in does not work on a fresh checkout
+
+The frontend's auth schema must exist before sign-in works. If
+`apps/frontend/data/app.sqlite` does not exist yet, create it once:
+
+```bash
+cd apps/frontend && pnpm dlx @better-auth/cli@latest migrate --config lib/auth.ts
+```
+
+The first registered user is the admin.
+
+## Ports collide
+
+`pnpm dev` from the root starts frontend :3000, engine :4011, mockbank
+:4010, and docs :3001 in parallel. Do not also run a per-app
+`pnpm --filter <pkg> dev` for one of those, or the ports collide.
+
+## Where did my evidence go?
+
+Nothing is written to the filesystem. Step logs, transcripts, results, and
+screenshots are blobs in the engine SQLite DB (`run_files` table). Read
+them back over the API at `/runs/:id/files[/:name]` or in the console at
+`/admin/runs/:id`. See [Evidence & storage](/docs/evidence).

@@ -52,15 +52,32 @@ goal → discovery (model in the loop) → artifact (typed contract)
 ```
 
 1. **Discovery** — the model drives a live Chromium toward a natural-
-  language goal, one structured action per step, until the goal state is
-  reached.
+   language goal, one structured action per step, until the goal state is
+   reached. See [Discovery](/docs/discovery).
 2. **Distillation** — the successful trajectory is distilled into a typed,
-  versioned capability artifact (see [Capabilities](/docs/capabilities)).
+   versioned capability artifact (see [Capabilities](/docs/capabilities)).
 3. **Replay** — the engine executes the artifact's ordered steps against
-  the live app with zero model calls, asserting a machine-checkable
-  checkpoint at the end and returning typed outputs, a known business
-  outcome, or a debuggable failure.
+   the live app with zero model calls, asserting a machine-checkable
+   checkpoint at the end and returning typed outputs, a known business
+   outcome, or a debuggable failure. See [Replay & results](/docs/replay).
 
 Policy is enforced and evidence is captured at every step: risky actions
 raise segregated operator approvals, and a human can take over the same
-live session mid-run and hand control back.
+live session mid-run and hand control back (see
+[Approvals & handoff](/docs/approvals)).
+
+## Request / control flow
+
+```
+calling agent ──HTTP──▶ frontend (/api/engine/*, auth-gated)
+                         │ server-only typed client
+                         ▼
+                       engine HTTP API (:4011) ──▶ mockbank (:4010)
+                         ▲
+operator browser ──WS─── engine /ws control channel (pause/cede/resume)
+```
+
+The browser never calls the engine over HTTP, and the engine never sees
+the user's session — the frontend proxy is the trust boundary. The
+WebSocket channel is a localhost trust boundary that carries control
+messages and step events, not auth. See [Engine API](/docs/engine-api).

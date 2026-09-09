@@ -1719,3 +1719,33 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   behavior/setup changes must touch `apps/docs/content/docs/` too.
 - **References:** `apps/docs/`, `AGENTS.md`, root `package.json`,
   `pnpm-workspace.yaml`; D-059.
+
+### D-061 — 2026-09-09T13:57:23Z — Expand apps/docs with screenshots and full operator/reference coverage
+
+- **Status:** accepted
+- **Decision/change:** Rebuilt the docs from 4 thin pages into a 13-page
+  site with 19 real UI screenshots. New pages: `operator-console` (a
+  screenshot tour of every admin screen + the caller chat), `discovery`,
+  `replay`, `approvals`, `engine-api` (all 22 HTTP routes + the `/ws`
+  control channel), `cli`, `mockbank`, `evidence`, and `troubleshooting`;
+  `index`, `running-locally`, `architecture`, and `capabilities` were
+  expanded with screenshots, a real annotated artifact, the locator-
+  strategy table, and cross-links. Screenshots were captured with
+  Playwright against the live seeded stack (1440×900 @2x, dark theme) into
+  `apps/docs/public/screenshots/`; `meta.json` was updated for the new
+  nav. A throwaway capture script was used and deleted (not committed, per
+  the no-automated-verification convention — screenshots are docs assets,
+  not tests).
+- **Why:** Owner feedback — the documentation was extremely poor: no
+  screenshots and not enough detail or explanation. The docs now cover the
+  operator surface, the engine contract, and the demo path with visual
+  evidence.
+- **Consequences/follow-up:** `apps/docs` format/lint/typecheck/build all
+  pass. Screenshots are static assets; when the UI changes they should be
+  re-captured (same viewport/theme) to stay in sync. A throwaway
+  `docs-demo@bankgpt.local` account was created in the local frontend DB
+  to authenticate the capture; it is not committed and does not affect the
+  repo.
+- **References:** `apps/docs/content/docs/`,
+  `apps/docs/public/screenshots/`, `apps/docs/content/docs/meta.json`;
+  D-060.

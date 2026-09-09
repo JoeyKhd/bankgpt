@@ -1,0 +1,78 @@
+---
+title: Replay & results
+description: Deterministic execution with zero model calls — typed inputs, step retry, business outcomes, and the four run results.
+---
+
+Replay is the production execution path. Given a saved capability artifact
+and typed inputs, the engine executes the recorded steps against the live
+app **without any model calls** and returns a structured result. Nothing
+continues blindly: every step is asserted, transient conditions are
+retried, and every run ends in one of four typed outcomes.
+
+## How a replay executes
+
+1. **Validate inputs** against the artifact's declared `inputs` (required
+   flags, enum allowed-values, types). Bad input fails before a browser
+   opens.
+2. **Resolve each step target** by the primary `a11y` locator, then the
+   recorded fallbacks **in recorded order** — never a DOM-ordered locator
+   union — with explicit waits. Pixel coordinates are never used.
+3. **Substitute `{{input}}` placeholders** with the validated, typed
+   values.
+4. **Run `extract` steps** to fill the declared outputs (`text`, `value`,
+   or `page-text-match` regex capture).
+5. **After each step**, check the business-outcome detect rules and the
+   step's own checkpoint; at the end, assert the artifact's machine-
+   checkable checkpoint holds.
+
+## Transient conditions and retry
+
+The target app is deliberately hostile (random latency, a transient HTTP
+500 every 7th authenticated GET, 5-minute session expiry). Replay treats
+these as **recoverable**: a step that hits a transient server error page
+or a timing miss is retried up to `MAX_STEP_ATTEMPTS` (3) times, reloading
+the page before re-driving. A step whose checkpoint fails while a business
+outcome is about to fire is a control-flow signal, not a failure — the
+retry loop rethrows it untouched so the outcome still lands.
+
+## The four run results
+
+Every replay returns exactly one of these — never a thrown exception for
+an expected runtime condition:
+
+| Status | Meaning | Key fields |
+| ------ | ------- | ---------- |
+| `success` | Checkpoint held, outputs extracted. | `outputs`, `stepsExecuted`, `durationMs` |
+| `business_outcome` | An **expected** outcome fired — a legitimate answer, not a crash. | `outcome` (code), `detail`, `stepsExecuted` |
+| `recoverable` | A transient condition matched a recoverable rule but retries were exhausted. | `step`, `condition`, `retryPolicy { attempts, waitedMs }` |
+| `hard_failure` | A condition that must stop execution with a debuggable error. | `step`, `expected`, `observed` |
+
+The calling agent branches on `business_outcome` codes (for example
+`member_not_found`) exactly as it would on a typed API error — the
+difference is that the "API" is a recorded UI flow.
+
+## Risk gating
+
+- **Safe** capabilities replay straight through (unreviewed is allowed).
+- **Risky** capabilities must be `reviewed: true`, and a server-invoked
+  risky run carries an **approval token** issued by the approvals
+  endpoints. The token is scoped to one capability, single-use, and
+  verified before the first step. CLI replay is operator-invoked, so the
+  approval is implicit (`approved: true`).
+
+## Evidence
+
+A replay run stores `steps.jsonl` (one redacted JSON object per step,
+including approval and dialog steps), `result.json`, and — on failure or
+handoff — a screenshot plus accessibility snapshot. See
+[Evidence & storage](/docs/evidence).
+
+## Running a replay
+
+```bash
+pnpm --filter engine replay \
+  --capability get_member_balances \
+  --input memberId=100231
+```
+
+Replay never needs `OPENROUTER_API_KEY` — it makes zero model calls.

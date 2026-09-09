@@ -1,0 +1,54 @@
+---
+title: Mockbank target
+description: FinCore Teller — the deliberately hostile mock back-office console used as the proxy application.
+---
+
+`apps/mockbank` (port 4010) is **FinCore Teller**, a zero-dependency
+`node:http` mock back-office console. It stands in for the real banking
+application the automation integrates with — the "application with no
+API" the assignment calls for. It is deliberately hostile so the engine
+has to be genuinely robust, not lucky.
+
+![Mockbank login](/screenshots/mockbank-login.png)
+
+## Why it is hostile
+
+| Hostility | Why it exists |
+| --------- | ------------- |
+| Legacy table markup, no ids or test IDs | Forces accessibility-tree-first targeting instead of convenient selectors. |
+| Random latency | Forces explicit waits, never fixed sleeps. |
+| A transient HTTP 500 every 7th authenticated GET | Forces transient-error retry and reload logic. |
+| 5-minute session expiry | Forces the `session_expired` business outcome. |
+| A native `window.confirm` gating the risky submit | Forces deliberate dialog handling. |
+
+## The flows it supports
+
+Sign in (the demo environment accepts **any credentials**), search for a
+member, and open the member detail page:
+
+![Mockbank home](/screenshots/mockbank-home.png)
+
+![Search results](/screenshots/mockbank-search-results.png)
+
+The member detail page is where the read and write capabilities operate:
+reading savings/checking balances, opening a sub-account, and freezing a
+debit card (the risky submit gated by the native confirm).
+
+![Member detail](/screenshots/mockbank-member.png)
+
+## Seeded data
+
+The store seeds a deterministic member set (for example member `100231`)
+so discovery and replay have a stable target. Reset the counters and the
+transient-500 cadence before a graded run:
+
+```bash
+curl -X POST http://127.0.0.1:4010/__reset__
+```
+
+## Conventions
+
+FinCore Teller uses real `<a>`, `<button>`, `<input>`, `<select>`, and
+`<label>` tags so the accessibility tree is meaningful — that is the whole
+point. The footer reads "FinCore Federal Credit Union core system v3.7 —
+authorized tellers only. Sessions end after 5 minutes of inactivity."
