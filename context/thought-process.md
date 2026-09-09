@@ -1208,3 +1208,35 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** `apps/engine/src/session.ts`, `src/server.ts`,
   `apps/frontend/app/(app)/admin/interventions/`,
   `apps/frontend/lib/engine/ws.ts`; assignment §3.5; D-044, D-045.
+
+### D-048 — 2026-09-09T10:00:54Z — Engine server migrated to Hono; `@/` import alias; handoff proof evidence
+
+- **Status:** accepted (owner direction)
+- **Decision/change:** Two owner-requested refactors, both
+  behavior-preserving (verified: CLI replay success, POST /replay 202 + WS
+  step stream, 12 route status/message probes matching old behavior):
+  (1) **Hono** — `server.ts` is now a Hono app on `@hono/node-server`
+  `serve()`; WS shares the listener via `upgradeWebSocket` +
+  `WebSocketServer({noServer:true})` passed to `serve()`'s websocket
+  option (`@hono/node-ws` is deprecated; `ws` remains for that server).
+  `@hono/zod-validator` validates all bodies against the existing zod
+  schemas, reproducing the exact prior 400 messages. Every route/method/
+  status/shape preserved (incl. `GET`/`POST /sessions/:runId` +
+  `/state`/`/action`), the 202 async run-start + WS broadcasts,
+  `redactValue` on all JSON, and the byte-identical WS protocol.
+  (2) **`@/` alias** — replaced the 36 NodeNext `./x.js` relative imports
+  with `@/x` via tsconfig `paths {"@/*": ["./src/*.js"]}` (the `.js` in
+  the mapping triggers the `.js`→`.ts` source substitution so it both
+  typechecks and resolves in tsx); build is `tsc && tsc-alias` (rewrites
+  `@/x` → `./x.js` in dist).
+- **Why:** Owner review — Hono is cleaner than hand-rolled `node:http`
+  routing; `@/db` reads better than `./db.js`.
+- **Consequences/follow-up:** Captured the two missing genuine proof runs
+  into `/evidence/runs/`: an approval-segregation run (different requester
+  vs approver, scoped one-time token) and a stuck-take-over handoff run
+  (pause → cede → real operator action over WS → resume → success, human
+  actions recorded). Engine README + NOTES updated. Gotcha recorded:
+  `getCapability` picks latest by `createdAt` and the upsert does not
+  refresh it.
+- **References:** `apps/engine/src/server.ts`, `tsconfig.json`,
+  `apps/engine/NOTES.md`, `/evidence/runs/`; D-041, D-047.
