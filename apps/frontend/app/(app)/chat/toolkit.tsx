@@ -1,5 +1,6 @@
 "use generative"
 
+import { useEffect, useState } from "react"
 import { defineToolkit } from "@assistant-ui/react"
 import {
   AlertTriangleIcon,
@@ -14,6 +15,7 @@ import { z } from "zod"
 
 import type {
   Capability,
+  CapabilityRisk,
   InvokeCapabilityResult,
 } from "@/lib/capabilities-catalog"
 import { invokeStubCapability } from "@/lib/capabilities-catalog"
@@ -219,6 +221,72 @@ type InvokeResult =
   | { source: "live"; live: InvokeLiveResult }
   | { source: "stub"; stub: InvokeCapabilityResult }
 
+// Resolve the invoked capability's risk class the same way the executor
+// does: live engine catalog first, stub catalog when the engine is offline.
+// `live` records WHICH source answered — approval wording is only truthful
+// when the live engine confirmed the capability is risky, because only then
+// does the executor actually raise an approval intervention.
+const useInvocationRisk = (capabilityId: string | undefined) => {
+  // The resolution is tagged with the id it belongs to; a stale resolution
+  // for a previous id reads as unresolved, so no synchronous reset is needed.
+  const [resolution, setResolution] = useState<
+    { capabilityId: string; risk: CapabilityRisk; live: boolean } | undefined
+  >(undefined)
+  useEffect(() => {
+    if (!capabilityId) return
+    let cancelled = false
+    const resolveRisk = async () => {
+      try {
+        const { listLiveCapabilities } = await import("@/lib/engine/invoke")
+        const match = (await listLiveCapabilities()).find(
+          (capability) => capability.id === capabilityId
+        )
+        if (match) {
+          if (!cancelled)
+            setResolution({ capabilityId, risk: match.risk, live: true })
+          return
+        }
+      } catch {
+        // Engine offline — fall back to the stub catalog below.
+      }
+      const { getCapabilityRisk } = await import("@/lib/capabilities-catalog")
+      const risk = getCapabilityRisk(capabilityId)
+      if (!cancelled && risk) setResolution({ capabilityId, risk, live: false })
+    }
+    void resolveRisk()
+    return () => {
+      cancelled = true
+    }
+  }, [capabilityId])
+  return capabilityId !== undefined && resolution?.capabilityId === capabilityId
+    ? resolution
+    : undefined
+}
+
+// Neutral in-flight state. It makes NO claim about approval requests — a
+// safe invocation never raises one, and claiming otherwise is a lie.
+const RunningInvocation = ({
+  capabilityId,
+  inputs,
+}: {
+  capabilityId?: string
+  inputs: Record<string, unknown>
+}) => (
+  <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-card/60 p-4">
+    <div className="flex items-center gap-2">
+      <Loader2Icon className="size-4 animate-spin text-emerald-300" />
+      <span className="text-sm font-semibold text-foreground">
+        Invoking <span className="font-mono">{capabilityId ?? "…"}</span>
+      </span>
+    </div>
+    <p className="text-xs leading-relaxed text-muted-foreground">
+      Submitting to the automation engine, which replays the recorded flow in
+      the target application — deterministically, with no model in the loop.
+    </p>
+    {Object.keys(inputs).length > 0 && <InputsTable inputs={inputs} />}
+  </div>
+)
+
 const WaitingForOperator = ({
   capabilityId,
   inputs,
@@ -256,12 +324,18 @@ const InvokeCapabilityUI = ({
   result?: InvokeResult
 }) => {
   const inputs = args?.inputs ?? {}
+  const resolution = useInvocationRisk(args?.capabilityId)
 
-  // Running: a risky invocation shows "waiting for operator" while the tool
-  // polls the intervention; a safe one shows the replay in flight.
+  // Running: show the operator-approval card only once the LIVE engine
+  // catalog has confirmed the capability is risky — that is the one case
+  // where the executor raises a real approval intervention. Safe invocations
+  // (and anything not yet resolved) get the neutral running state instead of
+  // a false claim that an approval request exists.
   if (result === undefined) {
-    return (
+    return resolution?.live && resolution.risk === "risky" ? (
       <WaitingForOperator capabilityId={args?.capabilityId} inputs={inputs} />
+    ) : (
+      <RunningInvocation capabilityId={args?.capabilityId} inputs={inputs} />
     )
   }
 
@@ -503,10 +577,17 @@ export default defineToolkit({
           "Input values keyed by the capability's input names, matching its declared types."
         ),
     }),
-    execute: runInvoke as unknown as (args: {
+    // FRONTEND executor: the "use client" directive inside this INLINE
+    // function body is what the "use generative" compiler keys on — a
+    // referenced or cast function would be misclassified as a backend tool
+    // and dropped from the client build. Keep the executor inline.
+    execute: async (args: {
       capabilityId: string
       inputs: Record<string, unknown>
-    }) => Promise<InvokeResult>,
+    }): Promise<InvokeResult> => {
+      "use client"
+      return runInvoke(args)
+    },
     // Approval and consequential results must never collapse into the tool group.
     display: "standalone",
     render: InvokeCapabilityUI,

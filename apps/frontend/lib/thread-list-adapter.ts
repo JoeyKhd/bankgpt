@@ -41,7 +41,21 @@ const request = async (
 ): Promise<Response> => {
   const res = await fetch(input, init)
   if (!res.ok) {
-    throw new Error(`Thread request failed: ${res.status} ${input}`)
+    // The runtime only logs history load/save failures to the console
+    // ("Failed to persist message history: …"), so make the thrown error as
+    // actionable as possible: method, path, status, and the API route's own
+    // { error } detail when present.
+    const detail = await res
+      .json()
+      .then((body: unknown) =>
+        typeof body === "object" && body !== null && "error" in body
+          ? String((body as { error: unknown }).error)
+          : undefined
+      )
+      .catch(() => undefined)
+    throw new Error(
+      `Thread request failed: ${init?.method ?? "GET"} ${input} → ${res.status}${detail ? ` (${detail})` : ""}`
+    )
   }
   return res
 }

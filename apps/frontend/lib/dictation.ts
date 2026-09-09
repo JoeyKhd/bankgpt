@@ -5,6 +5,11 @@ import {
   type DictationAdapter,
 } from "@assistant-ui/react"
 
+const FALLBACK_MESSAGE = "Voice input failed. Please try again."
+const START_FAILED_MESSAGE = "Voice input couldn't start. Please try again."
+const UNSUPPORTED_MESSAGE =
+  "Voice input isn't supported in this browser. Try Chrome, Edge, or Safari."
+
 // Native SpeechRecognition error codes mapped to user-facing text. The
 // "network" code is what Chrome raises when its server-side speech service
 // can't be reached, which is by far the most common failure in practice.
@@ -21,11 +26,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   "language-not-supported":
     "Voice input doesn't support your current language setting.",
   aborted: "Voice input was interrupted.",
+  unsupported: UNSUPPORTED_MESSAGE,
+  "start-failed": START_FAILED_MESSAGE,
 }
-
-const FALLBACK_MESSAGE = "Voice input failed. Please try again."
-const UNSUPPORTED_MESSAGE =
-  "Voice input isn't supported in this browser. Try Chrome, Edge, or Safari."
 
 export const isDictationSupported = () =>
   WebSpeechDictationAdapter.isSupported()
@@ -48,21 +51,35 @@ const reportDictationError = (code: string) => {
   notifyError?.(ERROR_MESSAGES[code] ?? FALLBACK_MESSAGE)
 }
 
+let consolePatched = false
+
+// The underlying adapter reports recognition failures ASYNCHRONOUSLY: its
+// SpeechRecognition "error" event fires while a session is active, after
+// listen() has already returned, and it reports via
+// console.error("Dictation error:", code, message). Intercepting that one
+// call only for the duration of listen() (the previous behavior) missed
+// every real failure — so the interceptor is installed once and stays in
+// place for the app's lifetime. Every non-dictation call passes through
+// untouched.
+const patchConsoleError = () => {
+  if (consolePatched) return
+  consolePatched = true
+  const originalError = console.error
+  console.error = (...args: unknown[]) => {
+    if (args[0] === "Dictation error:") {
+      reportDictationError(String(args[1] ?? ""))
+    }
+    originalError.apply(console, args)
+  }
+}
+
 // Wraps the Web Speech adapter so failures reach the user instead of only
-// hitting the console. The underlying adapter logs recognition errors as
-// console.error("Dictation error:", code, message), so we intercept that one
-// call to recover the error code; everything else passes through untouched.
+// hitting the console.
 class ReportingDictationAdapter implements DictationAdapter {
   private inner = new WebSpeechDictationAdapter()
 
   listen(): DictationAdapter.Session {
-    const originalError = console.error
-    console.error = (...args: unknown[]) => {
-      if (args[0] === "Dictation error:") {
-        reportDictationError(String(args[1] ?? ""))
-      }
-      originalError.apply(console, args)
-    }
+    patchConsoleError()
     try {
       return this.inner.listen()
     } catch (error) {
@@ -74,8 +91,6 @@ class ReportingDictationAdapter implements DictationAdapter {
           : "start-failed"
       )
       return failedSession()
-    } finally {
-      console.error = originalError
     }
   }
 }

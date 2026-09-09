@@ -9,7 +9,7 @@ import {
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react"
 import { useChatRuntime, useThreadTokenUsage } from "@assistant-ui/ai-sdk"
-import { lastAssistantMessageIsCompleteWithApprovalResponses } from "ai"
+import { lastAssistantMessageIsCompleteWithToolCalls } from "ai"
 import { LayoutDashboardIcon } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -141,9 +141,12 @@ export const ChatClient = () => {
   const runtime = useRemoteThreadListRuntime({
     adapter: threadListAdapter,
     runtimeHook: function useChatThreadRuntime() {
+      // The approval gate was removed (D-046: segregated operator approval
+      // inside the invoke tool, never the requester), so auto-send after any
+      // completed tool call — frontend tool results must round-trip to the
+      // model without a manual nudge.
       return useChatRuntime({
-        sendAutomaticallyWhen:
-          lastAssistantMessageIsCompleteWithApprovalResponses,
+        sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
         adapters: { dictation: createDictationAdapter() },
       })
     },

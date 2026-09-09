@@ -4,6 +4,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { z } from "zod"
 
 import { getThread, renameThread } from "@/lib/chat-threads"
+import { redactValue } from "@/lib/redaction"
 import { requireSession } from "@/lib/require-session"
 
 export const maxDuration = 30
@@ -59,7 +60,11 @@ export const POST = async (
     return Response.json({ error: "Invalid body" }, { status: 400 })
   }
 
-  const transcript = parsed.data.messages
+  // The transcript goes to a third-party model — redact secret/PII-shaped
+  // content first, same as the message-persistence path.
+  const safeMessages = redactValue(parsed.data.messages) as unknown[]
+
+  const transcript = safeMessages
     .map((message) => {
       const role = (message as { role?: unknown }).role
       const text = textOf(message).slice(0, 800)

@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import { getThread, listMessages, putMessage } from "@/lib/chat-threads"
+import { redactEncodedMessageContent } from "@/lib/redaction"
 import { requireSession } from "@/lib/require-session"
 
 type Params = { params: Promise<{ threadId: string }> }
@@ -53,6 +54,11 @@ export const POST = async (req: Request, { params }: Params) => {
     return Response.json({ error: "Invalid body" }, { status: 400 })
   }
 
-  putMessage(threadId, parsed.data)
+  // Redact before persistence: the store must never hold raw credentials or
+  // banking PII, even if a user pastes them into the chat.
+  putMessage(threadId, {
+    ...parsed.data,
+    content: redactEncodedMessageContent(parsed.data.content),
+  })
   return new Response(null, { status: 204 })
 }
