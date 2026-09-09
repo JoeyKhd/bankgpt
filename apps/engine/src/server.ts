@@ -4,6 +4,7 @@
  *
  * HTTP (JSON):
  *   GET  /health
+ *   GET  /policy                        the effective safety policy (read-only)
  *   GET  /capabilities
  *   GET  /capabilities/:id
  *   POST /capabilities                    save/upsert an artifact
@@ -669,6 +670,12 @@ export const startEngineServer = (options: ServerOptions) => {
   app.notFound((c) => json(c, 404, { error: "not found" }))
 
   app.get("/health", (c) => json(c, 200, { ok: true, service: "engine" }))
+
+  // The effective safety policy (assignment §3.4), read-only: the console
+  // renders this verbatim instead of a hardcoded stub. The policy is code/
+  // config — `defaultPolicy()` here, or `ServerOptions.policy` injected by
+  // the host process; there is deliberately no PUT/POST editor.
+  app.get("/policy", (c) => json(c, 200, policy))
 
   app.get("/capabilities", (c) => json(c, 200, listCapabilities(db)))
 
