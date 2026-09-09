@@ -8,7 +8,7 @@ import {
   Tools,
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react"
-import { useChatRuntime, useThreadTokenUsage } from "@assistant-ui/ai-sdk"
+import { useChatRuntime } from "@assistant-ui/ai-sdk"
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai"
 import { LayoutDashboardIcon } from "lucide-react"
 import Image from "next/image"
@@ -110,16 +110,6 @@ const ComposerModelSelectorInner = () => {
   )
 }
 
-const TokenUsage = () => {
-  const usage = useThreadTokenUsage()
-  if (!usage) return null
-  return (
-    <span className="rounded-full border border-white/10 px-2.5 py-1 font-mono text-xs text-muted-foreground">
-      {(usage.totalTokens ?? 0).toLocaleString()} tokens
-    </span>
-  )
-}
-
 const Welcome = () => (
   <div className="mb-8 flex flex-col items-center gap-4 px-4 text-center">
     <span className={monoEyebrow}>Caller simulation</span>
@@ -203,10 +193,6 @@ export const ChatClient = () => {
             </div>
           </aside>
           <main className="flex min-w-0 flex-1 flex-col">
-            <header className="flex items-center justify-between gap-3 border-b border-white/6 px-4 py-3 sm:px-6">
-              <span className={monoEyebrow}>Caller simulation</span>
-              <TokenUsage />
-            </header>
             <div className="min-h-0 flex-1">
               <Thread
                 components={{ Welcome, ComposerLeft: ComposerModelSelector }}
