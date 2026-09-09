@@ -1,0 +1,10 @@
+{
+  "status": "success",
+  "capabilityId": "open_sub_account",
+  "outputs": {
+    "accountNumber": "7100070001",
+    "confirmationNumber": "CNF-5001"
+  },
+  "stepsExecuted": 15,
+  "durationMs": 3976
+}

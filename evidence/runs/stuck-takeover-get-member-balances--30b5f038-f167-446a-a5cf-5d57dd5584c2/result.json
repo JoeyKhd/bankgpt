@@ -1,0 +1,11 @@
+{
+  "status": "success",
+  "capabilityId": "get_member_balances",
+  "outputs": {
+    "memberName": "Margaret Ellison",
+    "savingsBalance": "$12,480.55",
+    "checkingBalance": "$1,204.10"
+  },
+  "stepsExecuted": 10,
+  "durationMs": 35972
+}

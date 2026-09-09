@@ -6,5 +6,7 @@
   "replay-open-sub-account-happy": "a7b6c89d-f46c-4add-979c-faf6c03d6c1a",
   "replay-open-sub-account-invalid-deposit": "15f044f6-aab3-4599-a6d3-18d37ff99856",
   "replay-open-sub-account-repeat-deterministic": "ae08c02b-1129-45a1-9a85-9c6126c0a7b7",
-  "replay-transient-500-recovery": "4fa295db-13c5-4b29-b66e-f333198e116d"
+  "replay-transient-500-recovery": "4fa295db-13c5-4b29-b66e-f333198e116d",
+  "approval-segregation-open-sub-account": "c48ffa84-bbdb-4b60-ae39-95966e562b32",
+  "stuck-takeover-get-member-balances": "30b5f038-f167-446a-a5cf-5d57dd5584c2"
 }

@@ -214,3 +214,38 @@ Behavior is unchanged — verified by execution against the live mockbank:
 - Proof runs: CLI `replay get_member_balances memberId=100231` → success
   with the expected balances, and `POST /replay` → 202 → WS step stream →
   `run-finished` success against `pnpm --filter engine dev`.
+
+## Proof runs: approval segregation + stuck take-over (2026-09-09, D-047)
+
+Captured after the Hono migration against the live engine server
+(`pnpm --filter engine dev`, port 4011) and a freshly reset mockbank. Both
+landed in the repo-root `/evidence/` bundle (see its README). No model calls
+(replay only); nothing scripted into the target.
+
+1. **Approval segregation** — `POST /approvals {capabilityId:
+   open_sub_account, inputs: {memberId 100231, savings, 50}, requestedBy:
+   proof-requester@bankgpt.demo}` → 201, run `awaiting_approval`, zero steps.
+   `POST /approvals/:id/approve {decidedBy: proof-operator@bankgpt.demo}` →
+   `selfApproved: false`; the engine consumed the scoped one-time token
+   (`consumedByRunId` = the run) and started the run itself → `success`
+   `{accountNumber 7100070001, confirmationNumber CNF-5001}`. Run
+   `c48ffa84-bbdb-4b60-ae39-95966e562b32`.
+2. **Stuck take-over** — replayed a proof-only artifact copy
+   (`evidence/artifacts/get_member_balances__handoff-probe.json`, step 6
+   locator seeded stale) so the click fails all attempts with no matching
+   business outcome. The engine raised the stuck intervention (screenshot +
+   aria persisted), paused, and waited (policy `handoffTimeoutMs`
+   1_200_000). Over `/ws` + the session routes: `pause` → `cede` →
+   `GET /sessions/:id/state` → `POST /sessions/:id/action` (real click on
+   "View member", page moved to `/members/100231`) → `resume`. The run
+   re-drove the step (passed — the human had landed it on the right page),
+   extracted all outputs, `success`. Intervention auto-resolved
+   (`decidedBy` the operator, note in the record). Run
+   `30b5f038-f167-446a-a5cf-5d57dd5584c2`.
+
+The canonical `get_member_balances` artifact is the latest stored version
+again (`1.2.1`, reviewed) and a final post-reset replay succeeded
+(`e5b7f118-78a7-46de-83e9-06e6dba8a404`) — the probe polluted nothing
+permanently. `getCapability` picks the latest by `createdAt` and the
+`ON CONFLICT` upsert does NOT refresh `createdAt`, so re-saves with fresh
+timestamps need a fresh patch version (recorded for the next worker).

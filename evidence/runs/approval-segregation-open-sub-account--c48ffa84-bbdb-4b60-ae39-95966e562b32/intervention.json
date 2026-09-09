@@ -1,0 +1,15 @@
+{
+  "id": "2bced4d9-6b78-46a7-9f42-c385765d51e8",
+  "runId": "c48ffa84-bbdb-4b60-ae39-95966e562b32",
+  "kind": "approval",
+  "status": "approved",
+  "reason": "proof run: approval segregation",
+  "context": "{\"capabilityId\":\"open_sub_account\",\"inputs\":{\"memberId\":\"100231\",\"accountType\":\"savings\",\"initialDeposit\":\"50\"},\"source\":\"request\",\"selfApproved\":false,\"executionRunId\":\"c48ffa84-bbdb-4b60-ae39-95966e562b32\"}",
+  "createdAt": "2026-09-09T09:56:42.664Z",
+  "resolvedAt": "2026-09-09T09:56:46.329Z",
+  "requestedBy": "proof-requester@bankgpt.demo",
+  "decidedBy": "proof-operator@bankgpt.demo",
+  "decisionReason": "proof: segregated approval",
+  "approvalToken": "[REDACTED]",
+  "consumedByRunId": "c48ffa84-bbdb-4b60-ae39-95966e562b32"
+}

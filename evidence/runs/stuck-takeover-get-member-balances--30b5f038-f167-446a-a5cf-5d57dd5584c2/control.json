@@ -1,0 +1,25 @@
+[
+  {
+    "at": "2026-09-09T09:58:09.937Z",
+    "event": "session-opened"
+  },
+  {
+    "at": "2026-09-09T09:58:43.636Z",
+    "event": "paused"
+  },
+  {
+    "at": "2026-09-09T09:58:43.637Z",
+    "event": "ceded",
+    "detail": "control ceded to proof-operator@bankgpt.demo"
+  },
+  {
+    "at": "2026-09-09T09:58:45.021Z",
+    "event": "human-action",
+    "detail": "proof-operator@bankgpt.demo: clicked link \"View member\""
+  },
+  {
+    "at": "2026-09-09T09:58:45.878Z",
+    "event": "resumed",
+    "detail": "control returned by proof-operator@bankgpt.demo"
+  }
+]

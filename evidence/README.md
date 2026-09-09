@@ -26,6 +26,7 @@ curl -X POST http://127.0.0.1:4010/__reset__   # before every run (deterministic
 | --- | --- | --- |
 | `artifacts/get_member_balances.json` | safe | Log in → search member → open detail → read savings & checking balances. Reviewed (`reviewed: true`). |
 | `artifacts/open_sub_account.json` | risky | Log in → member → open savings sub-account with an initial deposit → tick the authorization checkbox → **native `window.confirm` accepted per policy** → reach the confirmation screen and read the account + confirmation numbers. Reviewed. |
+| `artifacts/get_member_balances__handoff-probe.json` | safe | **Proof-only** copy of `get_member_balances` with step 6's locator seeded stale (pre-rename label "Member summary") so the run gets genuinely stuck and escalates — used ONLY by `stuck-takeover-get-member-balances--…`. The canonical artifact is untouched. |
 
 ## Runs
 
@@ -57,6 +58,23 @@ relevant.
 | `replay-open-sub-account-invalid-deposit--15f044f6-…` | `business_outcome: invalid_input` — a negative deposit re-renders the form with "Initial deposit cannot be negative."; the engine reports the outcome instead of a step failure. |
 | `replay-transient-500-recovery--4fa295db-…` | The target answers every 7th authenticated GET with a transient HTTP 500 ("Core system unavailable"). `steps.jsonl` shows the engine detect it (`transient-reload`), reload, and re-drive the step. |
 | `replay-open-sub-account-repeat-deterministic--ae08c02b-…` | Second happy-path run after a fresh reset returns **identical** `{accountNumber: "7100070001", confirmationNumber: "CNF-5001"}` — deterministic replay + deterministic target counters. |
+
+### Approval segregation + live-session take-over (D-047 proof runs)
+
+Genuine runs against the live engine server (`pnpm --filter engine dev`,
+Hono HTTP + `/ws` control channel) after `POST /__reset__`, driven over the
+real HTTP API and WebSocket — nothing scripted into the target. Each run
+folder also holds its `intervention.json` (the persisted decision record)
+and `control.json` (the session ownership log).
+
+| Directory | Outcome |
+| --- | --- |
+| `approval-segregation-open-sub-account--c48ffa84-…` | The requester (`proof-requester@bankgpt.demo`) raised a request-first approval for the risky `open_sub_account` (`POST /approvals` → 201, run `awaiting_approval`, zero steps executed). A **different** operator (`proof-operator@bankgpt.demo`) approved (`intervention.json`: `selfApproved: false`, scoped one-time `approvalToken` redacted, `consumedByRunId` = the run). The engine started the run itself; it completed `success` with `{accountNumber: "7100070001", confirmationNumber: "CNF-5001"}`. `steps.jsonl` carries the audit `approval` entry (`approved by proof-operator@bankgpt.demo …; run started`). |
+| `stuck-takeover-get-member-balances--30b5f038-…` | Step 6 ("Open the member detail page") failed all attempts against a seeded stale locator (`artifacts/get_member_balances__handoff-probe.json` — the pre-rename link label "Member summary"; the target's link is "View member"). The engine raised a `stuck` intervention with screenshot + aria (`handoff-step-6.*`), paused, and waited. The operator sent `pause` + `cede` over `/ws` (`control.json`: `paused` → `ceded to proof-operator@…`), read the live state (`GET /sessions/:runId/state`), performed a REAL manual step on the SAME page (`POST /sessions/:runId/action` click link "View member" — recorded as a `human-action` in `steps.jsonl` and `control.json`), then sent `resume`. The run re-drove the step (which now passed because the human had navigated to the member detail page), extracted all three outputs, and finished `success`; the stuck intervention resolved to `resolved` with the operator's handoff note. |
+
+These prove the two segregation-of-duties paths: **maker ≠ checker** for
+risky actions, and **automation ↔ human hand-off** on one live session with
+every control transition and manual step in the run evidence.
 
 ## Commands that produced these
 
