@@ -152,6 +152,14 @@ export const CapabilityStepSchema = z.object({
   pattern: z.string().optional(),
   /** Optional per-step assertion checked right after the action. */
   checkpoint: z.lazy(() => CheckpointSchema).optional(),
+  /**
+   * Business-outcome codes that must NOT fire right after this step. Use when
+   * an outcome's detect text also matches an intermediate page (e.g. a
+   * validation error re-renders the same form): the step's own checkpoint
+   * fails first and the step retry loop re-drives, while the outcome still
+   * fires on later steps.
+   */
+  suppressOutcomes: z.array(z.string()).optional(),
 })
 export type CapabilityStep = z.infer<typeof CapabilityStepSchema>
 

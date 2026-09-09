@@ -59,6 +59,21 @@ class TransientServerError extends Error {
   }
 }
 
+/**
+ * Control-flow signal, not a failure: a business outcome matched while a
+ * step checkpoint was about to be checked. The retry loop rethrows it
+ * untouched; the run loop turns it into the business_outcome result without
+ * waiting out the checkpoint timeout.
+ */
+class BusinessOutcomeInterrupt extends Error {
+  readonly outcome: { code: string; detail: string }
+  constructor(outcome: { code: string; detail: string }) {
+    super(`business outcome during step: ${outcome.code}`)
+    this.name = "BusinessOutcomeInterrupt"
+    this.outcome = outcome
+  }
+}
+
 /** Substitute `{{inputName}}` placeholders using validated inputs. */
 const substitute = (template: string, inputs: ReplayInputs): string =>
   template.replace(/\{\{(\w+)\}\}/g, (_m, name: string) => {
@@ -204,9 +219,11 @@ const checkCheckpoint = async (
 /** Check whether any declared business outcome currently matches the page. */
 const detectBusinessOutcome = async (
   page: Page,
-  artifact: CapabilityArtifact
+  artifact: CapabilityArtifact,
+  suppress: string[] = []
 ): Promise<{ code: string; detail: string } | undefined> => {
   for (const outcome of artifact.businessOutcomes) {
+    if (suppress.includes(outcome.code)) continue
     const urlOk = outcome.detect.urlPattern
       ? new RegExp(outcome.detect.urlPattern).test(page.url())
       : true
@@ -228,7 +245,8 @@ const detectBusinessOutcome = async (
 const executeStep = async (
   page: Page,
   step: CapabilityStep,
-  inputs: ReplayInputs
+  inputs: ReplayInputs,
+  consumedInputs: Set<string>
 ): Promise<string> => {
   switch (step.action) {
     case "navigate": {
@@ -245,7 +263,14 @@ const executeStep = async (
     case "type": {
       if (!step.target) throw new Error("type step needs a target")
       const value = step.value ? substitute(step.value, inputs) : ""
-      await resolveTarget(page, step.target).first().fill(value)
+      const locator = resolveTarget(page, step.target).first()
+      // A consumed input's value is already echoed in the re-rendered field;
+      // filling again would retype the same value. Skip the fill.
+      if (step.input && consumedInputs.has(step.input)) {
+        return `skipped retype of consumed input "${step.input}" in ${describeLocator(step.target.primary)}`
+      }
+      await locator.fill(value)
+      if (step.input) consumedInputs.add(step.input)
       return `typed into ${describeLocator(step.target.primary)}`
     }
     case "select": {
@@ -371,6 +396,11 @@ export const replayCapability = async (
   })
   const outputs: Record<string, string | number | boolean> = {}
   let stepsExecuted = 0
+  // Inputs already typed by a successful step. When a later page re-render
+  // (validation error, transient reload) re-drives the flow, these steps are
+  // NOT retyped — the app echoes the submitted values back, and retyping the
+  // same key would double it. Re-driving uses the echoed value instead.
+  const consumedInputs = new Set<string>()
 
   // Bootstrap: replay must START at the recorded surface. When the first
   // step is not itself a navigate, open the artifact's targetApp first.
@@ -461,7 +491,7 @@ export const replayCapability = async (
             if (step.outputName) outputs[step.outputName] = value
             detail = `extracted ${step.outputName}=${JSON.stringify(value)}`
           } else {
-            detail = await executeStep(page, step, inputs)
+            detail = await executeStep(page, step, inputs, consumedInputs)
           }
           // The action itself may have navigated into a transient 5xx page
           // (e.g. a click whose target page 500s). Surface it so the NEXT
@@ -470,6 +500,12 @@ export const replayCapability = async (
             throw new TransientServerError(lastMainStatus)
           }
           if (step.checkpoint && step.action !== "wait") {
+            // A business outcome may already match (e.g. a validation error
+            // re-render): fail FAST instead of waiting out the checkpoint.
+            // Unsuppressed — a checkpoint failure with a matching outcome is
+            // the answer, same rule as the post-step failure path.
+            const early = await detectBusinessOutcome(page, artifact)
+            if (early) throw new BusinessOutcomeInterrupt(early)
             const res = await checkCheckpoint(page, step.checkpoint)
             if (!res.ok)
               throw new Error(`step checkpoint failed: ${res.detail}`)
@@ -478,11 +514,13 @@ export const replayCapability = async (
           break
         } catch (err) {
           lastError = err
-          // Only retry wait-like/transient failures, never policy violations.
+          // Policy violations and a matched business outcome propagate
+          // untouched; only wait-like/transient failures are retried.
           if (
             err instanceof Error &&
             (err.name === "PolicyViolationError" ||
-              err.name === "ApprovalRequiredError")
+              err.name === "ApprovalRequiredError" ||
+              err.name === "BusinessOutcomeInterrupt")
           ) {
             throw err
           }
@@ -506,25 +544,57 @@ export const replayCapability = async (
       })
       options.events?.onStep?.(i, step, ok)
 
-      if (!ok) {
+      if (ok) {
+        // Step passed: expected business outcome? That is an ANSWER — stop
+        // cleanly. `suppressOutcomes` keeps codes whose detect text also
+        // matches this step's healthy page (e.g. a validation-error string
+        // that shares words with the form) from short-circuiting the flow.
+        const outcome = await detectBusinessOutcome(
+          page,
+          artifact,
+          step.suppressOutcomes ?? []
+        )
+        if (outcome) {
+          return {
+            status: "business_outcome",
+            capabilityId,
+            outcome: outcome.code,
+            detail: outcome.detail,
+            stepsExecuted,
+            durationMs: durationMs(),
+          }
+        }
+      } else {
+        // Step failed: it may still BE an expected business outcome (e.g. a
+        // validation error re-render that fails the step's checkpoint). All
+        // outcomes apply here — suppression only guards the healthy path —
+        // and a legitimate answer wins over the step error.
+        const outcome = await detectBusinessOutcome(page, artifact)
+        if (outcome) {
+          evidence.logStep({
+            runId: options.runId,
+            stepIndex: i,
+            at: new Date().toISOString(),
+            action: "outcome-probe",
+            target: page.url(),
+            reason: `step failed but the page matches business outcome "${outcome.code}" — reporting the outcome, not the failure`,
+            durationMs: 0,
+            result: "ok",
+          })
+          return {
+            status: "business_outcome",
+            capabilityId,
+            outcome: outcome.code,
+            detail: outcome.detail,
+            stepsExecuted,
+            durationMs: durationMs(),
+          }
+        }
         return await fail(
           i,
           step.intent,
           lastError instanceof Error ? lastError.message : String(lastError)
         )
-      }
-
-      // Expected business outcome? That is an ANSWER — stop cleanly.
-      const outcome = await detectBusinessOutcome(page, artifact)
-      if (outcome) {
-        return {
-          status: "business_outcome",
-          capabilityId,
-          outcome: outcome.code,
-          detail: outcome.detail,
-          stepsExecuted,
-          durationMs: durationMs(),
-        }
       }
     }
 
@@ -544,6 +614,18 @@ export const replayCapability = async (
       stepsExecuted,
       durationMs: durationMs(),
     }
+  } catch (err) {
+    if (err instanceof BusinessOutcomeInterrupt) {
+      return {
+        status: "business_outcome",
+        capabilityId,
+        outcome: err.outcome.code,
+        detail: err.outcome.detail,
+        stepsExecuted,
+        durationMs: durationMs(),
+      }
+    }
+    throw err
   } finally {
     await context.close().catch(() => undefined)
   }
