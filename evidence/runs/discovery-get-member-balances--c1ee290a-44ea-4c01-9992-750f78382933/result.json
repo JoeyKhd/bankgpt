@@ -1,0 +1,7 @@
+{
+  "status": "success",
+  "goal": "Log in to the teller console and read member 100231's savings and checking balances",
+  "stepsExecuted": 7,
+  "durationMs": 30415,
+  "capabilityId": "get_member_balances"
+}

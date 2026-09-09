@@ -1,0 +1,7 @@
+{
+  "status": "success",
+  "goal": "Open a new savings sub-account for member 100231 with an initial deposit of 250 and reach the confirmation screen",
+  "stepsExecuted": 12,
+  "durationMs": 52197,
+  "capabilityId": "open_savings_sub_account"
+}

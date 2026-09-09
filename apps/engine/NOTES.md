@@ -70,3 +70,81 @@ evidence runs against the finished mockbank happen at integration time.
   `ENGINE_DB_PATH`/`ENGINE_EVIDENCE_DIR` explicitly in production.
 - Artifact distillation quality improves with a second distillation pass
   that validates targets against the live page (self-healing draft).
+
+## Final graded runs (integration, 2026-09-09, against the FINISHED mockbank)
+
+Discovery + distillation model: **`google/gemini-2.5-flash`** via OpenRouter
+(unchanged). Every run below followed `POST /__reset__`. The reviewed
+artifacts and all run logs are copied into the repo-root **`/evidence/`**
+bundle (see its README for the index).
+
+| Capability | Run | Result |
+| --- | --- | --- |
+| `get_member_balances` | discovery `c1ee290a-44ea-4c01-9992-750f78382933` | success, 7 steps, distilled + reviewed |
+| | replay happy `53d839f5-b835-4461-96bf-1364cb970127` | success, outputs `{$12,480.55, $1,204.10, "Margaret Ellison"}` |
+| | replay exceptional `f74d1b6d-48bd-40f5-b6b3-f2180ec2df0a` (memberId 999999) | `business_outcome: member_not_found` |
+| `open_sub_account` | discovery `f1ae0424-82b1-4aa3-ab17-78045d9ebe97` | success, 12 steps incl. checkbox + native confirm |
+| | replay happy `a7b6c89d-f46c-4add-979c-faf6c03d6c1a` | success, `{accountNumber 7100070001, confirmationNumber CNF-5001}` |
+| | replay exceptional `15f044f6-aab3-4599-a6d3-18d37ff99856` (deposit -50) | `business_outcome: invalid_input` |
+| | replay repeat `ae08c02b-1129-45a1-9a85-9c6126c0a7b7` | success, identical `7100070001`/`CNF-5001` (deterministic) |
+| transient recovery probe | replay `4fa295db-13c5-4b29-b66e-f333198e116d` | `transient-reload` fired on the every-7th-GET 500, page reloaded, step re-driven |
+
+### Engine fixes made at integration (each its own commit)
+
+1. **Native dialogs.** New `src/dialogs.ts` attaches a policy-driven
+   (`policy.dialogHandling`, default `accept`) `page.on("dialog")` handler in
+   BOTH discovery and replay; every handled dialog is logged as a `dialog`
+   step. Without a listener Playwright dismisses confirms, which silently
+   canceled the sub-account submit.
+2. **Transient-5xx recovery (replay).** The last main-document response
+   status is tracked; a >=500 answer makes the step loop reload the
+   idempotent page (bounded by `policy.transientErrorMaxReloads`, logged as
+   `transient-reload`) and re-drive the step.
+3. **Distillation grounding.** The distiller now receives the terminal
+   page's visible text plus business-outcome rules PROBED against the live
+   app (`/search/results?q=0-unknown-member`, `/session-expired`); verified
+   probes win over model guesses. Distill failures are logged to evidence
+   instead of swallowed (this is how the first silent failure was found).
+4. **Extraction.** `page-text-match` matches against whitespace-normalized
+   text (legacy table cells render as newlines) and returns the LAST capture
+   group (earlier groups are anchors like the nickname column).
+5. **Business outcomes vs failed steps.** A matched business outcome wins
+   over a failed step checkpoint (validation errors re-render the form with
+   HTTP 200); new optional per-step `suppressOutcomes` guards the healthy
+   path from detect strings that also match intermediate pages; a
+   pre-checkpoint probe fails fast (`BusinessOutcomeInterrupt`) instead of
+   waiting out the timeout.
+6. **Re-fill suppression.** Inputs typed by an earlier successful step are
+   not retyped when a re-rendered page re-drives the flow (the app echoes
+   submitted values back).
+7. **Policy gate.** An UNREVIEWED risky capability without an approval token
+   is refused (`policy.requireReviewForRisky` is now actually enforced).
+8. **Optional inputs** substitute empty when omitted (required ones are
+   still caught by `validateInputs`).
+
+### Artifact review passes (the "human review" both artifacts carry)
+
+- `get_member_balances`: renamed credential inputs to `tellerUsername`/
+  `tellerPassword` and made them optional (the demo target accepts any
+  credentials); rebound balance extraction per account TYPE (the draft keyed
+  on the seeded nickname literal); removed `{{memberId}}` placeholders from
+  the checkpoint (the executor does not substitute there); added per-step
+  checkpoints + CSS form-name fallbacks; added a `memberName` output.
+- `open_sub_account`: added the `accountType` enum input + a real `select`
+  step (the draft hardcoded "savings"); added the missing login `navigate`
+  step; replaced the draft's single-occurrence confirmation-URL checkpoint
+  (`c=CNF-5001`) with the stable `/confirmation?c=CNF-\d+` shape; tightened
+  `invalid_input` detect to the actual error sentence ("cannot be negative")
+  so it does not match the healthy form; added `invalid_input` +
+  `session_expired` outcomes and `suppressOutcomes` on the review step.
+
+### Remaining gaps (for REPORT.md)
+
+- Discovery runs the target's 500-page recovery only via the model's own
+  retry intuition; there is no structured 5xx retry in the discovery loop
+  (replay has one). A discovery run that hits the 7th-GET 500 relies on the
+  model choosing to retry — it did in every run here.
+- `member_not_found` on `open_sub_account` fires via the shared detect text;
+  the member-form 404 variant ("No member exists with ID") is also covered
+  by the same text.
+- Approval tokens are still not scoped per capability/run (server-side).

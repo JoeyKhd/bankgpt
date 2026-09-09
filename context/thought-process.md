@@ -1112,3 +1112,35 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   intentionally not proxied. Chat stub catalog and the four PageStub surfaces
   remain for later workers.
 - **References:** `apps/frontend/lib/engine/NOTES.md`, D-041, D-043.
+
+## D-045 — 2026-09-09T00:10:23Z — Graded evidence runs + engine hardening at integration
+
+- **Status:** accepted
+- **Decision/change:** Ran the final, graded discovery + replay evidence for
+  both capabilities against the finished mockbank and hardened the engine
+  where the real runs exposed gaps: (1) native-dialog handling
+  (`src/dialogs.ts`, policy `dialogHandling`, logged `dialog` steps) in
+  discovery AND replay; (2) transient-5xx recovery in replay (reload the
+  idempotent page and re-drive the step, bounded and logged as
+  `transient-reload`); (3) distillation grounded in the terminal page's
+  visible text + live-probed business-outcome rules, with distill failures
+  logged instead of swallowed; (4) whitespace-normalized, last-capture-group
+  page-text extraction; (5) business outcomes win over failed-step
+  checkpoints, with per-step `suppressOutcomes` and a fast pre-checkpoint
+  probe; (6) re-fill suppression for already-typed inputs on re-rendered
+  pages; (7) enforcement of `requireReviewForRisky` for unreviewed risky
+  capabilities; (8) optional inputs substitute empty when omitted. Both
+  artifacts (`get_member_balances`, `open_sub_account`) carry a documented
+  human review pass and `reviewed: true`. The graded bundle lives at the
+  repo-root **`/evidence/`** (assignment's exact deliverable path) with a
+  README index; run notes appended to `apps/engine/NOTES.md`.
+- **Why:** The assignment's core rule is a GENUINE discovery run with
+  evidence in `/evidence/`; integration against the finished mockbank
+  surfaced the exact hostile properties (native confirm, transient 500,
+  validation re-renders, session expiry) the engine had to survive, and the
+  fixes above are what made every graded path green.
+- **Consequences/follow-up:** Discovery-loop 5xx recovery still relies on
+  the model's own retry choice (replay has a structured one); approval
+  tokens remain unscoped per run server-side. Both recorded as REPORT cuts.
+- **References:** `/evidence/README.md`, `apps/engine/NOTES.md`; D-039,
+  D-042, D-043.

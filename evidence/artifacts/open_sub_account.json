@@ -1,0 +1,373 @@
+{
+  "id": "open_sub_account",
+  "version": "1.0.0",
+  "name": "Open savings sub-account",
+  "description": "Log in to the FinCore teller console, open a new savings sub-account for a member with an initial deposit, and read the confirmation number. Reviewed 2026-09-09 (see NOTES.md run notes).",
+  "goal": "Open a new savings sub-account for member 100231 with an initial deposit of 250 and reach the confirmation screen",
+  "targetApp": "http://127.0.0.1:4010",
+  "risk": "risky",
+  "createdAt": "2026-09-08T23:59:19.352Z",
+  "discoveryModel": "google/gemini-2.5-flash",
+  "discoveryRunId": "f1ae0424-82b1-4aa3-ab17-78045d9ebe97",
+  "inputs": [
+    {
+      "name": "tellerUsername",
+      "type": "string",
+      "required": false,
+      "description": "Teller console username (demo target accepts any credentials)"
+    },
+    {
+      "name": "tellerPassword",
+      "type": "string",
+      "required": false,
+      "description": "Teller console password (demo target accepts any credentials)"
+    },
+    {
+      "name": "memberId",
+      "type": "string",
+      "required": true,
+      "description": "Numeric ID of the member receiving the sub-account"
+    },
+    {
+      "name": "accountType",
+      "type": "enum",
+      "required": true,
+      "description": "Type of sub-account to open",
+      "values": [
+        "savings",
+        "checking",
+        "money-market"
+      ]
+    },
+    {
+      "name": "initialDeposit",
+      "type": "string",
+      "required": true,
+      "description": "Initial deposit in USD (0 or more; e.g. 250)"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "accountNumber",
+      "type": "string",
+      "description": "Account number of the newly opened sub-account (deterministic from 7100070001 after a target reset)"
+    },
+    {
+      "name": "confirmationNumber",
+      "type": "string",
+      "description": "Confirmation number for the opening (CNF-####, deterministic from CNF-5001 after a target reset)"
+    }
+  ],
+  "steps": [
+    {
+      "intent": "Open the teller console login page",
+      "action": "navigate",
+      "url": "http://127.0.0.1:4010/login"
+    },
+    {
+      "intent": "Type the teller username",
+      "action": "type",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "textbox",
+          "name": "Username",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "input[name=\"username\"]"
+          }
+        ],
+        "robustness": "The label-owned textbox name 'Username' survives restyling; the input's form name is a stable fallback."
+      },
+      "input": "tellerUsername",
+      "value": "{{tellerUsername}}"
+    },
+    {
+      "intent": "Type the teller password",
+      "action": "type",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "textbox",
+          "name": "Password",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "input[name=\"password\"]"
+          }
+        ],
+        "robustness": "The label-owned textbox name 'Password' survives restyling; the input's form name is a stable fallback."
+      },
+      "input": "tellerPassword",
+      "value": "{{tellerPassword}}"
+    },
+    {
+      "intent": "Submit the login form",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "button",
+          "name": "Log in",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "form[action=\"/login\"] button"
+          }
+        ],
+        "robustness": "The login form's only submit button."
+      },
+      "checkpoint": {
+        "urlPattern": "/dashboard$",
+        "visibleText": "Teller dashboard"
+      }
+    },
+    {
+      "intent": "Type the member ID into the search box",
+      "action": "type",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "textbox",
+          "name": "Member ID or name",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "input[name=\"q\"]"
+          }
+        ],
+        "robustness": "The dashboard's only search textbox; the query input name is a stable fallback."
+      },
+      "input": "memberId",
+      "value": "{{memberId}}"
+    },
+    {
+      "intent": "Submit the member search",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "button",
+          "name": "Search",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "form[action=\"/search/results\"] button"
+          }
+        ],
+        "robustness": "The search form's only button; the endpoint is stable."
+      },
+      "checkpoint": {
+        "urlPattern": "/search/results\\?q="
+      }
+    },
+    {
+      "intent": "Open the member detail page",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "link",
+          "name": "View member",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "a[href^=\"/members/\"]"
+          }
+        ],
+        "robustness": "The result row's only link."
+      },
+      "checkpoint": {
+        "urlPattern": "/members/\\d+$",
+        "visibleText": "Accounts"
+      }
+    },
+    {
+      "intent": "Open the sub-account form",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "link",
+          "name": "Open sub-account",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "a[href$=\"/accounts/new\"]"
+          }
+        ],
+        "robustness": "The member page's single sub-account link; its href suffix is a stable fallback."
+      },
+      "checkpoint": {
+        "urlPattern": "/members/\\d+/accounts/new$",
+        "visibleText": "Open sub-account"
+      }
+    },
+    {
+      "intent": "Choose the account type",
+      "action": "select",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "combobox",
+          "name": "Account type",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "select[name=\"accountType\"]"
+          }
+        ],
+        "robustness": "The label-owned select name 'Account type' survives restyling; the select's form name is a stable fallback."
+      },
+      "input": "accountType",
+      "value": "{{accountType}}"
+    },
+    {
+      "intent": "Type the initial deposit",
+      "action": "type",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "textbox",
+          "name": "Initial deposit (USD)",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "input[name=\"initialDeposit\"]"
+          }
+        ],
+        "robustness": "The label-owned textbox name survives restyling; the input's form name is a stable fallback."
+      },
+      "input": "initialDeposit",
+      "value": "{{initialDeposit}}"
+    },
+    {
+      "intent": "Continue to the review page",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "button",
+          "name": "Continue",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "form[action$=\"/accounts/review\"] button"
+          }
+        ],
+        "robustness": "The form's only submit button; the review endpoint is stable."
+      },
+      "checkpoint": {
+        "visibleText": "Review new sub-account"
+      },
+      "suppressOutcomes": [
+        "invalid_input"
+      ]
+    },
+    {
+      "intent": "Tick the authorization checkbox",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "checkbox",
+          "name": "I confirm these details are correct and authorize opening this sub-account.",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "input[name=\"acknowledge\"]"
+          }
+        ],
+        "robustness": "The review page's only checkbox; its label sentence is the legal gate and highly stable."
+      }
+    },
+    {
+      "intent": "Confirm opening the sub-account (the native confirm dialog is accepted per engine policy)",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "button",
+          "name": "Open sub-account",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "form[action$=\"/accounts\"] button"
+          }
+        ],
+        "robustness": "The review form's only submit button. Clicking fires the browser-native window.confirm gate, which the engine's dialog handler accepts per policy and logs to the run evidence."
+      },
+      "checkpoint": {
+        "urlPattern": "/members/\\d+/accounts/\\d+/confirmation\\?c=CNF-\\d+",
+        "visibleText": "Sub-account opened"
+      }
+    },
+    {
+      "intent": "Extract the new account number",
+      "action": "extract",
+      "outputName": "accountNumber",
+      "extractKind": "page-text-match",
+      "pattern": "Account number\\s+(\\d{10})"
+    },
+    {
+      "intent": "Extract the confirmation number",
+      "action": "extract",
+      "outputName": "confirmationNumber",
+      "extractKind": "page-text-match",
+      "pattern": "Confirmation number\\s+(CNF-\\d+)"
+    }
+  ],
+  "checkpoint": {
+    "urlPattern": "/members/\\d+/accounts/\\d+/confirmation\\?c=CNF-\\d+",
+    "visibleText": "Sub-account opened"
+  },
+  "businessOutcomes": [
+    {
+      "code": "member_not_found",
+      "description": "No member exists with the requested ID \u2014 a legitimate answer, not a failure.",
+      "detect": {
+        "visibleText": "No member found"
+      }
+    },
+    {
+      "code": "invalid_input",
+      "description": "The form rejected the deposit (negative or non-numeric) and re-rendered with the validation error 'Initial deposit cannot be negative. Enter 0 or more.'",
+      "detect": {
+        "visibleText": "cannot be negative"
+      }
+    },
+    {
+      "code": "session_expired",
+      "description": "The teller session ended from inactivity; log in again to continue.",
+      "detect": {
+        "visibleText": "Session expired"
+      }
+    }
+  ],
+  "reviewed": true
+}

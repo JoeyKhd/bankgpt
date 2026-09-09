@@ -1,0 +1,8 @@
+{
+  "status": "business_outcome",
+  "capabilityId": "open_sub_account",
+  "outcome": "invalid_input",
+  "detail": "The form rejected the deposit (negative or non-numeric) and re-rendered with the validation error 'Initial deposit cannot be negative. Enter 0 or more.'",
+  "stepsExecuted": 10,
+  "durationMs": 3524
+}
