@@ -32,6 +32,35 @@ Optional variables all have working defaults: `ENGINE_PORT` (4011),
 `NEXT_PUBLIC_ENGINE_WS_URL` (`ws://127.0.0.1:4011/ws`) for the frontend →
 engine wiring.
 
+## Docker
+
+The same stack runs in containers — one image per app
+(`apps/frontend/Dockerfile`, `apps/engine/Dockerfile`,
+`apps/mockbank/Dockerfile`, `apps/docs/Dockerfile`) plus the root
+`docker-compose.yaml`:
+
+```bash
+cp .env.example .env   # set BETTER_AUTH_SECRET + OPENROUTER_API_KEY
+docker compose build
+docker compose up      # frontend :3000, docs :3001, engine :4011, mockbank :4010
+```
+
+- **Persistent storage**: both SQLite databases live on named volumes —
+  `frontend-data` → `/data/app.sqlite` (auth + chat + app data) and
+  `engine-data` → `/data/engine.sqlite` (capabilities, runs,
+  interventions, run evidence). Volumes survive `docker compose down`;
+  `docker compose down -v` wipes them.
+- **better-auth schema**: the frontend container seeds a build-time
+  migrated database onto a fresh volume on first boot (copied only when
+  the volume is empty; existing data is never touched).
+- **Discovery targets**: the engine image ships Chromium, but the
+  Playwright browser runs inside the container network, so a discovery
+  `targetUrl` must use the service name — `http://mockbank:4010`, not
+  `http://localhost:4010` (inside the engine container `localhost` is the
+  container itself).
+- **Ports**: identical to the dev fan-out, so `pnpm dev` and
+  `docker compose up` cannot run at the same time.
+
 <Callout title="First run only">
   The frontend's auth schema must exist before sign-in works. If
   `apps/frontend/data/app.sqlite` does not exist yet, create it once:

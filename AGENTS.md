@@ -269,6 +269,26 @@ for frontend work.
   to match — a mismatch shows up as the admin console's "engine offline"
   banner and a dead live-session channel.
 
+## Docker
+
+- **One `Dockerfile` per app** (`apps/<app>/Dockerfile`, repo-root build
+  context) plus a root `docker-compose.yaml` that starts everything the
+  product needs: frontend :3000, docs :3001, engine :4011 (Chromium
+  pre-installed for discovery/replay), mockbank :4010.
+- **SQLite persistence is via named volumes**, never bind mounts or
+  image state: `frontend-data` → `/data/app.sqlite` and `engine-data` →
+  `/data/engine.sqlite` (`DATABASE_URL` / `ENGINE_DB_PATH` in compose).
+  `docker compose down -v` wipes them.
+- Compose env vars live in the root `.env.example` (`BETTER_AUTH_SECRET`,
+  `OPENROUTER_API_KEY` required); keep it name-only, never commit values.
+- The frontend container entrypoint seeds a build-time better-auth
+  migrated SQLite file onto the volume on first boot (only when empty),
+  so a fresh volume self-initializes offline.
+- Inside the compose network the engine's Playwright browser reaches
+  mockbank by service name (`http://mockbank:4010`); `localhost` there is
+  the container itself.
+- `docker compose up` and `pnpm dev` use the same ports — never both.
+
 ## Linting and formatting
 
 - Lint with **ESLint** (`eslint-config-next` core-web-vitals + typescript) and

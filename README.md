@@ -30,6 +30,7 @@ gets stuck, then hand control back.
 | `apps/mockbank` | **FinCore Teller** — the proxy target. A zero-dependency (`node:http`), deliberately hostile mock back-office banking console: legacy table markup, no test IDs, artificial latency, a transient HTTP 500 every 7th GET, session expiry, and a native `window.confirm` gate. Default port `4010`. |
 | `apps/docs` | This documentation site. Fumadocs (Next.js 16 + Fumadocs MDX) in the BankGPT dark-only brand; content lives in `apps/docs/content/docs/`. Default port `3001`. |
 | `context/` | Assignment, product brief, decision ledger, research. |
+| `docker-compose.yaml` + per-app `Dockerfile` | One-command container stack: frontend, engine (with Chromium), mockbank, docs; SQLite databases persist on named volumes. |
 
 Run evidence is not a checked-in folder: every run's step log, transcript,
 result, and failure/handoff screenshots are stored as blobs in the engine's
@@ -73,6 +74,32 @@ individually:
 ```bash
 pnpm dev                      # everything → http://localhost:3000 (docs: :3001)
 ```
+
+Or run the same stack in Docker (`docker compose up` — see the Docker
+section below for persistent SQLite volumes and the `targetUrl` caveat).
+
+### Docker (alternative)
+
+The same stack runs in containers — one image per app
+(`apps/frontend/Dockerfile`, `apps/engine/Dockerfile`,
+`apps/mockbank/Dockerfile`, `apps/docs/Dockerfile`) plus a root
+`docker-compose.yaml`:
+
+```bash
+cp .env.example .env   # set BETTER_AUTH_SECRET + OPENROUTER_API_KEY
+docker compose build
+docker compose up      # frontend :3000, docs :3001, engine :4011, mockbank :4010
+```
+
+Both SQLite databases persist on named volumes (`frontend-data` →
+`/data/app.sqlite`, `engine-data` → `/data/engine.sqlite`); they survive
+`docker compose down` and are only wiped by `docker compose down -v`. The
+engine image ships Chromium, so discovery and replay work in containers —
+but the Playwright browser runs **inside the engine's network**, so a
+discovery `targetUrl` must use the service name (`http://mockbank:4010`),
+not `localhost`. The frontend container seeds the better-auth
+schema onto a fresh volume on first boot (a build-time migrated database
+is baked into the image and copied over only when the volume is empty).
 
 Open `http://localhost:3000` and register — **the first registered user is
 the admin**. `/chat` is the caller simulation (ask it to look up a member or

@@ -1749,3 +1749,49 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** `apps/docs/content/docs/`,
   `apps/docs/public/screenshots/`, `apps/docs/content/docs/meta.json`;
   D-060.
+
+### D-062 — 2026-09-09T14:08:50Z — Dockerize the stack: per-app Dockerfiles + docker-compose with persistent SQLite volumes
+
+- **Status:** accepted
+- **Decision/change:** Owner request — containerize the product. Added one
+  `Dockerfile` per app (`apps/frontend`, `apps/engine`, `apps/mockbank`,
+  `apps/docs`) with repo-root build contexts, a root `docker-compose.yaml`
+  that starts all four services, a root `.dockerignore`, and a root
+  `.env.example` (name-only `BETTER_AUTH_SECRET` + `OPENROUTER_API_KEY`).
+  Multi-stage images: pnpm workspace installs are filter-scoped
+  (`--filter <app>...`), engine/mockbank compile with `ts7`+`tsc-alias` and
+  run on prod-only `pnpm deploy --legacy` node_modules; the two Next apps
+  build with Turbopack (the default — required, because withAui's generative
+  bundler-redirect only resolves under Turbopack; webpack's page-data
+  collection loads the redirect in Node where it throws) into
+  `output: "standalone"` bundles. The engine image pre-installs
+  Chromium 1.63 + OS deps and runs as a non-root user with the browser
+  baked in (`PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`). Persistent storage
+  uses named volumes: `frontend-data` → `/data/app.sqlite`,
+  `engine-data` → `/data/engine.sqlite`. The frontend container entrypoint
+  seeds a build-time better-auth-migrated SQLite file onto the volume on
+  first boot (only when empty), so fresh volumes self-initialize offline —
+  better-auth does not auto-migrate and the migrate CLI is not in the prod
+  node_modules (the build checkpoints the WAL before copying the seed).
+  `next.config.ts` for frontend and docs
+  gained `output: "standalone"`; AGENTS.md gained a Docker conventions
+  section; README and `apps/docs/content/docs/running-locally.mdx` gained
+  Docker run sections.
+- **Why:** Owner asked for Dockerfiles per service and a compose stack with
+  persistent SQLite storage.
+- **Consequences/follow-up:** `docker compose build && docker compose up`
+  is a second, equivalent way to run the demo (ports unchanged, so never
+  alongside `pnpm dev`). Inside the compose network, discovery
+  `targetUrl` values must use the service name (`http://mockbank:4010`).
+  Host ports are overridable via `FRONTEND_HOST_PORT` / `DOCS_HOST_PORT` /
+  `ENGINE_HOST_PORT` / `MOCKBANK_HOST_PORT`. Known build gotchas encoded in
+  the Dockerfiles: `lib/db.ts` opens SQLite at import time so the build
+  stage needs a pre-migrated throwaway `data/` dir; Next standalone omits
+  `better-sqlite3`, so the frontend runtime merges the `pnpm deploy` prod
+  node_modules over the traced ones; fresh named volumes inherit `/data`
+  ownership from the image (`mkdir + chown` in the Dockerfile), and the
+  frontend image carries a seeded schema DB (`/seed/app.sqlite`).
+- **References:** `docker-compose.yaml`, `apps/*/Dockerfile`,
+  `.dockerignore`, `.env.example`, `apps/frontend/next.config.ts`,
+  `apps/docs/next.config.ts`, `README.md`,
+  `apps/docs/content/docs/running-locally.mdx`, `AGENTS.md`; D-059.
