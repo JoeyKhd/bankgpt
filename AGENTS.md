@@ -124,6 +124,17 @@ silently expanding scope.
 
 ## Stack
 
+Conventions that apply to **every** workspace package:
+
+- **TypeScript only.** Every package in this monorepo is a TypeScript
+  package — no plain-JavaScript workspace members. New services, targets,
+  and apps start as strict TypeScript ESM with the engine-style toolchain
+  (`tsx` dev, `tsc` + `tsc-alias` build, ESLint, Prettier, `@/` alias).
+- **API servers are always Hono.js** (`hono` + `@hono/node-server`) with
+  zod-validated boundaries, bound to `127.0.0.1` by default (env override
+  for the host). `apps/engine` and `apps/mockbank` are the reference
+  implementations.
+
 ### apps/frontend
 
 - **Next.js 16.2.6** (App Router) + **React 19** + TypeScript strict

@@ -1305,3 +1305,27 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** `apps/engine/src/artifact.ts`, `src/replay.ts`, `src/db.ts`,
   `src/server.ts`; `README.md`, `REPORT.md`, `evidence/README.md`;
   D-043, D-045, D-047.
+
+### D-050 — 2026-09-09T11:40:06Z — Monorepo-wide conventions: TypeScript-only packages, Hono.js API servers
+
+- **Status:** accepted
+- **Decision/change:** Recorded two owner-directed conventions in AGENTS.md
+  (## Stack, applying to every workspace package): (1) every package in this
+  monorepo is always a TypeScript package — no plain-JavaScript workspace
+  members; new packages start as strict TypeScript ESM with the engine-style
+  toolchain (`tsx` dev, `tsc` + `tsc-alias` build, ESLint, Prettier, `@/`
+  alias). (2) any API server is always Hono.js (`hono` + `@hono/node-server`)
+  with zod-validated boundaries, bound to `127.0.0.1` by default.
+- **Why:** Owner direction after the mockbank conversion ("make it a
+  typescript project and the api server should be Hono.js just like the
+  engine"). One server framework and one language across packages keeps the
+  repo uniform and reviewable; the mockbank conversion (`e0e0929`) already
+  brought the last plain-JS package into line.
+- **Consequences/follow-up:** Applies to all future workspace members.
+  `apps/engine` and `apps/mockbank` are the reference implementations.
+  Existing Next.js frontend conventions are unaffected (it is already
+  TypeScript; its server side is Next route handlers, not a standalone API
+  server).
+- **References:** Owner request; `AGENTS.md` ## Stack; D-048 (engine Hono
+  migration); commit `e0e0929` (mockbank TypeScript + Hono conversion).
+

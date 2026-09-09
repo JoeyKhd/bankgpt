@@ -15,7 +15,7 @@ gets stuck, then hand control back.
 
 - Design write-up: **[REPORT.md](REPORT.md)**
 - Graded run bundle (genuine discovery + replay evidence): **[evidence/](evidence/README.md)**
-- Decision ledger (D-001…D-049): [context/thought-process.md](context/thought-process.md)
+- Decision ledger (D-001…D-050): [context/thought-process.md](context/thought-process.md)
 - Assignment: [context/assignment.md](context/assignment.md)
 
 ## Monorepo layout
