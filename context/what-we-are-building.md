@@ -199,6 +199,13 @@ Use the assignment's exact paths and report headings:
 4. **`/evidence/`** with a saved example artifact and logs from both a genuine
    discovery run and a replay run. An example replay that encounters an error or
    exceptional state is recommended. A short screen recording is optional.
+
+   > **Implementation note (D-059):** the assignment text above specifies a
+   > `/evidence/` folder, but per owner direction all run evidence is stored in
+   > the engine SQLite DB (`run_files` table) and served over the engine HTTP
+   > API (`/runs/:id/evidence`, `/runs/:id/files[/:name]`) instead. This is a
+   > deliberate supersession of the literal deliverable path — flagged here
+   > rather than silently changed. See the ledger.
 5. **Submission email** to `assignments@interface.ai`, sent from the address used
    to apply, with the public repository URL on its own line. Do not send a zip.
 

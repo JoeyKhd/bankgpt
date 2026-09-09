@@ -100,10 +100,11 @@ append-only). `RunDetail` refetches evidence whenever the polling
 `runQuery` row updates while `status === "running"`, so steps stream in
 every ~2s without changing `lib/engine`.
 
-Contract notes: no screenshot/artifact-binary endpoint exists — hard
-failures surface `evidenceDir` (a path on the engine host), which the UI
-renders as a path hint only. The capability list endpoint exposes no
-`targetApp`/step count, hence the per-card detail fetch.
+Contract notes: run evidence lives in the engine's SQLite DB (D-059) —
+screenshots/snapshots are served from `run_files` via
+`GET /runs/:id/files` and `GET /runs/:id/files/:name`; hard failures no
+longer surface an `evidenceDir` path. The capability list endpoint exposes
+no `targetApp`/step count, hence the per-card detail fetch.
 
 
 ## Policy surface (appended)

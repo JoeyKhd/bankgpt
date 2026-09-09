@@ -4,9 +4,12 @@ The system: an LLM discovers a back-office UI flow once, the run is distilled
 into a typed capability artifact, and a calling AI agent then invokes that
 capability through deterministic, model-free replay. Operators approve risky
 actions and take over live sessions when automation is stuck. The graded
-evidence for every claim below is in [`/evidence/`](evidence/README.md);
-the full decision history is the ledger (`context/thought-process.md`,
-D-001…D-049).
+evidence for every claim below lives in the engine's SQLite DB (D-059): run
+rows in `runs`, artifacts in `capabilities`, and every step log, transcript,
+screenshot, and snapshot as a `run_files` blob, served over the engine HTTP
+API at `/runs/:id/evidence` and `/runs/:id/files[/:name]` (SQL examples in
+the README). The full decision history is the ledger
+(`context/thought-process.md`, D-001…D-049).
 
 # Architecture
 
@@ -18,7 +21,8 @@ Three processes with explicit boundaries (D-023, D-041, D-048):
   exposes a Hono HTTP API plus a WebSocket control channel on one listener
   (`@hono/node-server` + `upgradeWebSocket`), validates every body with
   `@hono/zod-validator`, redacts every JSON response, and persists
-  capabilities/runs/interventions in SQLite (better-sqlite3, WAL).
+  capabilities/runs/interventions plus all run evidence (`run_files` blobs)
+  in SQLite (better-sqlite3, WAL).
 - **`apps/frontend`** — the operator surface. A Next.js 16 (React 19) app
   with the `/admin` console (capabilities, runs, discovery, interventions
   inbox with a live take-over panel) and a `/chat` caller simulation
@@ -106,7 +110,8 @@ invocable by an agent at the same time. Discovery stamps `1.0.0` with
 first-draft semantics (the distiller is a good drafter, not a finisher — it
 originally bound a balance cell by its value and turned the `done` signal
 into a click step) before `reviewed: true` and a version bump. The two
-graded artifacts (`evidence/artifacts/`) carry that review pass.
+graded artifacts (stored in the `capabilities` table) carry that review
+pass.
 
 # Determinism & error handling
 
@@ -138,8 +143,9 @@ exception for an expected runtime condition:
 - **`recoverable`** — a transient condition was retried up to its policy
   (per-step attempts, plus bounded reload-and-redrive) and classified,
   not hidden;
-- **`hard_failure(step, expected, observed, evidenceDir)`** — stops the run
-  with a debuggable contrast plus a screenshot and aria snapshot on disk.
+- **`hard_failure(step, expected, observed)`** — stops the run with a
+  debuggable contrast plus a screenshot and aria snapshot stored in
+  `run_files` (served at `/runs/:id/files/:name`).
 
 The exceptional states are handled deliberately, because the target produces
 them for real: a transient 500 every 7th GET triggers `transient-reload`
@@ -221,7 +227,8 @@ re-drove the step (which now passed — the human had landed it on the right
 page), extracted all three outputs, finished `success`, and the
 intervention auto-resolved with the operator's identity and note. Handoff
 evidence: `intervention.json`, `control.json`, `handoff-step-6.png/.yml`,
-and the `human-action` entries in `steps.jsonl`. The honest read: this run
+and the `human-action` entries in `steps.jsonl` — all `run_files` blobs on
+the run, served at `/runs/:id/files/:name`. The honest read: this run
 proves the *control-transfer and recovery* path (a human unsticking a run
 automation could not), not a fallback saving the day.
 
@@ -290,9 +297,12 @@ Deliberate omissions, each traded for depth elsewhere:
   after distillation; a second, self-validating distillation pass (probe the
   draft's locators against the live page) is future work, and today the
   human review pass is what closes that gap.
-- **No evidence-binary endpoint.** Hard failures surface `evidenceDir` (a
-  path on the engine host); the console renders a path hint rather than
-  serving screenshots/aria over HTTP.
+- **Evidence binaries are served, not browsed in the console.**
+  Screenshots and aria snapshots are stored as `run_files` blobs in SQLite
+  and served raw at `GET /runs/:id/files/:name` (list at
+  `GET /runs/:id/files`); the admin console does not render them inline —
+  the browser never calls the engine over HTTP (D-044), and proxying
+  binary evidence through the frontend was not worth the surface.
 - **Dev-simple transport trust model.** The engine's HTTP API and WS have no
   auth of their own; the auth boundary is the frontend's better-auth session
   on `/api/engine/*`, and the browser reaches `/ws` directly. Production
@@ -308,10 +318,11 @@ Deliberate omissions, each traded for depth elsewhere:
   the structured RESULT (outputs, outcome codes), never for the visual
   artifacts.
 - **CLI replay is operator-invoked.** It passes `approved: true` implicitly
-  and reads artifacts from the local evidence dir; the segregated approval
-  flow lives on the HTTP path.
+  and reads artifacts from the engine DB (`capabilities` table); the
+  segregated approval flow lives on the HTTP path.
 - **Stretch goals not built:** multi-tenant override storage and
   cross-variant proof, desktop drivers, replay-N stability scoring,
   draft→approved capability gating, and bounded LLM assisted-fallback on
   replay failure. The engine has no automated test suite — verification was
-  by executed runs, all preserved under `/evidence/`.
+  by executed runs, all preserved in the engine DB (`runs` + `run_files`
+  tables, D-059).

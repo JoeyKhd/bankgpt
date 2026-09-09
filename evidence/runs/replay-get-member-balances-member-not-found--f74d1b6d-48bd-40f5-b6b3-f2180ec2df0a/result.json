@@ -1,8 +1,0 @@
-{
-  "status": "business_outcome",
-  "capabilityId": "get_member_balances",
-  "outcome": "member_not_found",
-  "detail": "No member exists with the requested ID — a legitimate answer, not a failure.",
-  "stepsExecuted": 5,
-  "durationMs": 2600
-}

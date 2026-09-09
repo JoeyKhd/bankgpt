@@ -6,9 +6,8 @@ import { startEngineServer } from "@/server"
 const main = () => {
   const port = Number(process.env.ENGINE_PORT ?? 4011)
   const dbPath = process.env.ENGINE_DB_PATH ?? "data/engine.sqlite"
-  const evidenceDir = process.env.ENGINE_EVIDENCE_DIR ?? "evidence"
   const db = openEngineDb(dbPath)
-  startEngineServer({ port, db, evidenceDir })
+  startEngineServer({ port, db })
 }
 
 main()

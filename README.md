@@ -14,7 +14,10 @@ segregation) and can take over the **same live session** when automation
 gets stuck, then hand control back.
 
 - Design write-up: **[REPORT.md](REPORT.md)**
-- Graded run bundle (genuine discovery + replay evidence): **[evidence/](evidence/README.md)**
+- Graded run evidence (genuine discovery + replay runs): lives in the
+  engine's SQLite DB (D-059) — see
+  [REPORT.md#architecture](REPORT.md#architecture) and the query notes
+  below
 - Decision ledger (D-001…D-050): [context/thought-process.md](context/thought-process.md)
 - Assignment: [context/assignment.md](context/assignment.md)
 
@@ -25,8 +28,13 @@ gets stuck, then hand control back.
 | `apps/engine` | The automation service: LLM discovery loop, artifact schema, deterministic replay, policy/redaction, approvals, live-session handoff. TypeScript ESM, Hono HTTP API + WebSocket control channel (default port `4011`), SQLite via better-sqlite3. |
 | `apps/frontend` | Operator console + caller simulation. Next.js 16.2.6 (App Router) + React 19 + Tailwind 4 + shadcn, better-auth, assistant-ui + AI SDK v7. `/admin` is the operator console (capabilities, runs, discovery, interventions inbox with take-over panel); `/chat` simulates the calling AI agent invoking capabilities. Default port `3000`. |
 | `apps/mockbank` | **FinCore Teller** — the proxy target. A zero-dependency (`node:http`), deliberately hostile mock back-office banking console: legacy table markup, no test IDs, artificial latency, a transient HTTP 500 every 7th GET, session expiry, and a native `window.confirm` gate. Default port `4010`. |
-| `evidence/` | The graded demonstration bundle: reviewed artifacts + discovery/replay run logs + approval-segregation and stuck-take-over proof runs. |
+| `apps/docs` | This documentation site. Fumadocs (Next.js 16 + Fumadocs MDX) in the BankGPT dark-only brand; content lives in `apps/docs/content/docs/`. Default port `3001`. |
 | `context/` | Assignment, product brief, decision ledger, research. |
+
+Run evidence is not a checked-in folder: every run's step log, transcript,
+result, and failure/handoff screenshots are stored as blobs in the engine's
+SQLite DB (`run_files` table, D-059) and served over the engine HTTP API at
+`/runs/:id/files` and `/runs/:id/files/:name`.
 
 ## Setup
 
@@ -48,7 +56,7 @@ Environment:
   (`apps/frontend/.env.local`); generate locally with
   `openssl rand -base64 32`. It is a local signing secret, not a service key.
 - Optional, all with working defaults: `ENGINE_PORT` (4011),
-  `ENGINE_DB_PATH`, `ENGINE_EVIDENCE_DIR` (engine); `ENGINE_URL`
+  `ENGINE_DB_PATH` (engine); `ENGINE_URL`
   (`http://127.0.0.1:4011`) and `NEXT_PUBLIC_ENGINE_WS_URL`
   (`ws://127.0.0.1:4011/ws`) (frontend → engine wiring; the browser connects
   to the WS directly because Next route handlers cannot proxy upgrades).
@@ -59,10 +67,11 @@ engine redacts secret/PII-shaped values from everything it persists.
 ## Run
 
 **One command starts the whole demo** (mockbank :4010 + engine :4011 +
-frontend :3000, in parallel) — do not also start the services individually:
+frontend :3000 + docs :3001, in parallel) — do not also start the services
+individually:
 
 ```bash
-pnpm dev                      # everything → http://localhost:3000
+pnpm dev                      # everything → http://localhost:3000 (docs: :3001)
 ```
 
 Open `http://localhost:3000` and register — **the first registered user is
@@ -108,13 +117,17 @@ pnpm --filter engine discover \
 #    exactly that id below. Freshly distilled artifacts are reviewed:false.
 
 # 2. Review the artifact (required before a RISKY capability replays).
-#    Human review is part of the workflow: read the saved artifact
-#    (apps/engine/evidence/artifacts/<id>.json), fix target bindings or
-#    detect strings if needed, then import + mark it reviewed. Safe
-#    capabilities replay unreviewed; risky ones do not.
-#      - With the server running: POST /capabilities (import the edited
+#    Human review is part of the workflow: read the stored artifact
+#    (query the capabilities table, or GET /capabilities/<id> with the
+#    server running), fix target bindings or detect strings if needed,
+#    then re-import + mark it reviewed. Safe capabilities replay
+#    unreviewed; risky ones do not.
+#      - Read the stored artifact with:
+#          sqlite3 apps/engine/data/engine.sqlite \
+#            "SELECT artifact FROM capabilities WHERE id='<id>'"
+#        With the server running: POST /capabilities (import the edited
 #        artifact) then POST /capabilities/<id>/review.
-#      - For the CLI demo the checked-in artifacts already carry
+#      - For the CLI demo the stored graded artifacts already carry
 #        reviewed:true from their documented review pass (below).
 
 # 3. Deterministic replay (ZERO model calls; no API key needed).
@@ -136,10 +149,13 @@ pnpm --filter engine replay --capability open_sub_account \
 
 Notes on the replay path:
 
-- CLI replay reads the artifact from `apps/engine/evidence/artifacts/<id>.json`
-  (written there by `discover`). To skip discovery and replay the **reviewed,
-  graded artifacts** from this repo, copy them first:
-  `mkdir -p apps/engine/evidence/artifacts && cp evidence/artifacts/get_member_balances.json evidence/artifacts/open_sub_account.json apps/engine/evidence/artifacts/`
+- CLI replay reads the artifact from the engine DB (the `capabilities`
+  table in `apps/engine/data/engine.sqlite`, written there by `discover`).
+  The **reviewed, graded artifacts** are already stored there (imported
+  from the retired on-disk bundle, D-059) — nothing to copy. To inspect
+  one by hand:
+  `sqlite3 apps/engine/data/engine.sqlite "SELECT json_extract(artifact, '$.version'), reviewed FROM capabilities WHERE id='open_sub_account'"`
+  or, with the engine server running, `GET /capabilities/<id>`.
 - The risky `open_sub_account` artifact replays via CLI because CLI runs are
   operator-invoked (approval is implicit), but policy still refuses an
   **unreviewed** risky artifact — the graded artifact carries
@@ -162,9 +178,15 @@ Notes on the replay path:
 - **[REPORT.md](REPORT.md)** — architecture, artifact schema, determinism &
   error handling, heterogeneity/multi-tenant design, escalation & handoff,
   safety, cuts.
-- **[evidence/](evidence/README.md)** — the graded bundle: two genuine
-  discovery runs, happy-path + exceptional replays, a transient-500 recovery
-  probe, a deterministic-repeat run, and the two segregation-of-duties proof
-  runs (segregated approval; stuck → live-session take-over → resume).
+- **The graded run evidence (D-059)** — stored in the engine DB, not a
+  checked-in folder: two genuine discovery runs, happy-path + exceptional
+  replays, a transient-500 recovery probe, a deterministic-repeat run, and
+  the two segregation-of-duties proof runs (segregated approval; stuck →
+  live-session take-over → resume). Browse runs in the `/admin` console or
+  query directly, e.g.
+  `sqlite3 apps/engine/data/engine.sqlite "SELECT id, kind, status FROM runs"`
+  and `sqlite3 apps/engine/data/engine.sqlite "SELECT name, contentType, length(data) FROM run_files WHERE runId='<runId>'"`;
+  with the engine server running, `GET /runs`, `GET /runs/:id/evidence`,
+  and `GET /runs/:id/files[/:name]` serve the same rows over HTTP.
 - `apps/engine/README.md` — engine architecture page, full HTTP/WS API.
 - `apps/mockbank/README.md` — the target's seed data and deliberate hostility.

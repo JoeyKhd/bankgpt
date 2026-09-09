@@ -587,7 +587,6 @@ export const replayCapability = async (
       step,
       expected,
       observed,
-      evidenceDir: evidence.runDir,
       durationMs: durationMs(),
     }
   }

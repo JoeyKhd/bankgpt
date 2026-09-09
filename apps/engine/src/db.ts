@@ -1,11 +1,14 @@
 /**
- * Engine persistence (D-041): capabilities, runs, and interventions in the
- * engine's own SQLite database, separate from the frontend auth DB.
+ * Engine persistence (D-041): capabilities, runs, interventions, and run
+ * evidence files (D-059) in the engine's own SQLite database, separate
+ * from the frontend auth DB.
  *
  * One shared handle, WAL mode. Rows store validated JSON documents (the
- * capability artifact, the structured run result) as TEXT; querying happens
- * on a few indexed columns only. This keeps the schema small and the
- * artifact schema (artifact.ts) the single source of truth for shape.
+ * capability artifact, the structured run result) as TEXT; run evidence
+ * (step logs, transcripts, screenshots, snapshots) lives as BLOBs in
+ * run_files. Querying happens on a few indexed columns only. This keeps
+ * the schema small and the artifact schema (artifact.ts) the single
+ * source of truth for shape.
  */
 import Database from "better-sqlite3"
 import { createHash } from "node:crypto"
@@ -36,8 +39,23 @@ export type RunRow = {
   finishedAt: string | null
   /** Structured run result JSON (RunResult), when finished. */
   result: string | null
-  /** Directory holding steps.jsonl / transcript / screenshots. */
-  evidenceDir: string | null
+}
+
+/** One stored run-evidence file (steps.jsonl, result.json, screenshots…). */
+export type RunFileRow = {
+  runId: string
+  name: string
+  contentType: string
+  data: Buffer
+  createdAt: string
+}
+
+/** run_files listing entry: metadata only, size instead of the blob. */
+export type RunFileInfo = {
+  name: string
+  contentType: string
+  size: number
+  createdAt: string
 }
 
 export type InterventionRow = {
@@ -88,8 +106,15 @@ CREATE TABLE IF NOT EXISTS runs (
   targetUrl TEXT,
   startedAt TEXT NOT NULL,
   finishedAt TEXT,
-  result TEXT,
-  evidenceDir TEXT
+  result TEXT
+);
+CREATE TABLE IF NOT EXISTS run_files (
+  runId TEXT NOT NULL,
+  name TEXT NOT NULL,
+  contentType TEXT NOT NULL,
+  data BLOB NOT NULL,
+  createdAt TEXT NOT NULL,
+  PRIMARY KEY (runId, name)
 );
 CREATE TABLE IF NOT EXISTS interventions (
   id TEXT PRIMARY KEY,
@@ -118,8 +143,53 @@ export const openEngineDb = (dbPath: string): Database.Database => {
   const db = new Database(dbPath)
   db.pragma("journal_mode = WAL")
   migrateInterventions(db)
+  migrateRuns(db)
   db.exec(SCHEMA)
   return db
+}
+
+/**
+ * Run evidence moved from the filesystem into run_files (D-059), so the
+ * runs table drops its evidenceDir column. CREATE TABLE IF NOT EXISTS
+ * leaves old databases on the old shape, so rebuild the table when the
+ * column is detected (same rebuild pattern as migrateInterventions). The
+ * dead fs pointer is also removed from stored result JSON (json_remove
+ * is a no-op where it is absent).
+ */
+const migrateRuns = (db: Database.Database): void => {
+  const table = db
+    .prepare(
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'runs'`
+    )
+    .get()
+  if (!table) return
+  const columns = db.prepare(`PRAGMA table_info(runs)`).all() as Array<{
+    name: string
+  }>
+  const names = new Set(columns.map((c) => c.name))
+  if (!names.has("evidenceDir")) return
+  db.exec(`
+    BEGIN;
+    CREATE TABLE runs_next (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      capabilityId TEXT,
+      status TEXT NOT NULL,
+      goal TEXT,
+      targetUrl TEXT,
+      startedAt TEXT NOT NULL,
+      finishedAt TEXT,
+      result TEXT
+    );
+    INSERT INTO runs_next
+      (id, kind, capabilityId, status, goal, targetUrl, startedAt, finishedAt, result)
+      SELECT id, kind, capabilityId, status, goal, targetUrl, startedAt, finishedAt,
+        json_remove(result, '$.evidenceDir')
+      FROM runs;
+    DROP TABLE runs;
+    ALTER TABLE runs_next RENAME TO runs;
+    COMMIT;
+  `)
 }
 
 /**
@@ -271,9 +341,74 @@ export const insertRun = (db: Database.Database, row: RunRow): void => {
     targetUrl: row.targetUrl === null ? null : redactText(row.targetUrl),
   }
   db.prepare(
-    `INSERT INTO runs (id, kind, capabilityId, status, goal, targetUrl, startedAt, finishedAt, result, evidenceDir)
-     VALUES (@id, @kind, @capabilityId, @status, @goal, @targetUrl, @startedAt, @finishedAt, @result, @evidenceDir)`
+    `INSERT INTO runs (id, kind, capabilityId, status, goal, targetUrl, startedAt, finishedAt, result)
+     VALUES (@id, @kind, @capabilityId, @status, @goal, @targetUrl, @startedAt, @finishedAt, @result)`
   ).run(safe)
+}
+
+/**
+ * Store one run-evidence file (D-059). This is the raw persistence
+ * boundary — a BLOB store like the filesystem it replaces — so producers
+ * (the evidence writer, the handoff/result writers in server.ts) redact
+ * text BEFORE calling; binary payloads (screenshots) are stored as-is.
+ * Upserted on (runId, name): steps.jsonl is rewritten on every logged
+ * step, and re-running a migration import must be idempotent.
+ */
+export const putRunFile = (
+  db: Database.Database,
+  runId: string,
+  name: string,
+  contentType: string,
+  data: Buffer
+): void => {
+  db.prepare(
+    `INSERT INTO run_files (runId, name, contentType, data, createdAt)
+     VALUES (@runId, @name, @contentType, @data, @createdAt)
+     ON CONFLICT (runId, name) DO UPDATE SET
+       contentType = excluded.contentType,
+       data = excluded.data,
+       createdAt = excluded.createdAt`
+  ).run({ runId, name, contentType, data, createdAt: new Date().toISOString() })
+}
+
+/** Fetch one stored run-evidence file (blob included). */
+export const getRunFile = (
+  db: Database.Database,
+  runId: string,
+  name: string
+): RunFileRow | undefined =>
+  db
+    .prepare(`SELECT * FROM run_files WHERE runId = @runId AND name = @name`)
+    .get({ runId, name }) as RunFileRow | undefined
+
+/** List a run's stored evidence files (metadata + byte size, no blobs). */
+export const listRunFiles = (
+  db: Database.Database,
+  runId: string
+): RunFileInfo[] =>
+  db
+    .prepare(
+      `SELECT name, contentType, length(data) AS size, createdAt
+       FROM run_files WHERE runId = @runId ORDER BY name`
+    )
+    .all({ runId }) as RunFileInfo[]
+
+/**
+ * Read a run's step log back from the stored steps.jsonl blob (the
+ * canonical step store) and parse it into one object per step. Empty when
+ * the run has logged no steps.
+ */
+export const getRunSteps = (
+  db: Database.Database,
+  runId: string
+): unknown[] => {
+  const row = getRunFile(db, runId, "steps.jsonl")
+  if (!row) return []
+  return row.data
+    .toString("utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line): unknown => JSON.parse(line))
 }
 
 export const finishRun = (

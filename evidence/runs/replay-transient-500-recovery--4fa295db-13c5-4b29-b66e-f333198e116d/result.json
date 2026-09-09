@@ -1,9 +1,0 @@
-{
-  "status": "hard_failure",
-  "capabilityId": "probe_5xx",
-  "step": 11,
-  "expected": "Open the sub-account form",
-  "observed": "locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('link', { name: 'Open sub-account', exact: true }).or(locator('a[href$=\"/accounts/new\"]')).first()\n",
-  "evidenceDir": "evidence/runs/4fa295db-13c5-4b29-b66e-f333198e116d",
-  "durationMs": 66933
-}

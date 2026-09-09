@@ -13,7 +13,11 @@
  *   POST /replay                          start a replay run (async)
  *   GET  /runs
  *   GET  /runs/:id                        run row + parsed result
- *   GET  /runs/:id/evidence               steps.jsonl contents
+ *   GET  /runs/:id/evidence               parsed steps.jsonl step log
+ *   GET  /runs/:id/files                  stored evidence files (names,
+ *                                         content types, sizes)
+ *   GET  /runs/:id/files/:name            one stored evidence file, raw
+ *                                         bytes with its content type
  *   GET  /approvals                       list interventions/approvals
  *   POST /approvals                       request approval for a risky replay
  *                                         (creates the run, status
@@ -48,13 +52,12 @@
  * captures the page, raises a "stuck" intervention, and pauses until an
  * operator takes control (cede), performs manual steps on the SAME page,
  * and hands control back (resume); the run then continues. Human actions
- * are recorded into the run's evidence (steps.jsonl + control.json).
+ * are recorded into the run's evidence (steps.jsonl + control.json, both
+ * stored in run_files — D-059).
  *
  * WebSocket (/ws): step events for discovery AND replay + control channel
  * (pause/cede/resume/human-action) for the handoff.
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
 import { randomUUID } from "node:crypto"
 import { Hono, type Context } from "hono"
 import { HTTPException } from "hono/http-exception"
@@ -79,6 +82,10 @@ import {
   setRunStatus,
   getRun,
   listRuns,
+  putRunFile,
+  getRunFile,
+  listRunFiles,
+  getRunSteps,
   insertIntervention,
   getIntervention,
   listInterventions,
@@ -115,7 +122,6 @@ import {
 export type ServerOptions = {
   port: number
   db: Database.Database
-  evidenceDir: string
   policy?: Policy
   /** OpenRouter key for discovery; read from env when omitted. */
   openRouterApiKey?: string
@@ -240,7 +246,7 @@ export const startEngineServer = (options: ServerOptions) => {
   const apiKey =
     options.openRouterApiKey ?? process.env.OPENROUTER_API_KEY ?? ""
   const discoveryModel = options.discoveryModel ?? DEFAULT_MODEL
-  const { db, evidenceDir } = options
+  const { db } = options
 
   // One shared headless browser for replay/discovery sessions.
   let browserPromise: Promise<Browser> | undefined
@@ -274,14 +280,19 @@ export const startEngineServer = (options: ServerOptions) => {
   /** End-of-run bookkeeping: result, control log, session teardown, events. */
   const completeRun = async (
     runId: string,
-    result: { status: string },
-    evidence: EvidenceWriter
+    result: { status: string }
   ): Promise<void> => {
     const session = getSession(runId)
     if (session) {
-      writeFileSync(
-        join(evidence.runDir, "control.json"),
-        JSON.stringify(redactValue(session.controlLog), null, 2)
+      putRunFile(
+        db,
+        runId,
+        "control.json",
+        "application/json",
+        Buffer.from(
+          JSON.stringify(redactValue(session.controlLog), null, 2),
+          "utf8"
+        )
       )
     }
     finishRun(db, runId, result.status, JSON.stringify(result))
@@ -301,7 +312,6 @@ export const startEngineServer = (options: ServerOptions) => {
    */
   const makeStuckHandoff = (params: {
     runId: string
-    evidence: EvidenceWriter
     session: LiveSession
     contextBase: Record<string, unknown>
   }) => ({
@@ -312,7 +322,7 @@ export const startEngineServer = (options: ServerOptions) => {
       observed?: string
       reason?: string
     }): Promise<boolean> => {
-      const { runId, evidence, session } = params
+      const { runId, session } = params
       const stepIndex = info.stepIndex ?? 0
       let screenshotFile: string | undefined
       let ariaText: string | undefined
@@ -320,9 +330,15 @@ export const startEngineServer = (options: ServerOptions) => {
         const shot = await session.page.screenshot({ fullPage: true })
         const aria = await session.page.ariaSnapshot().catch(() => undefined)
         const base = `handoff-step-${stepIndex}`
-        writeFileSync(join(evidence.runDir, `${base}.png`), shot)
+        putRunFile(db, runId, `${base}.png`, "image/png", shot)
         if (aria) {
-          writeFileSync(join(evidence.runDir, `${base}.yml`), redactText(aria))
+          putRunFile(
+            db,
+            runId,
+            `${base}.yml`,
+            "application/yaml",
+            Buffer.from(redactText(aria), "utf8")
+          )
           ariaText = aria.slice(0, 3000)
         }
         screenshotFile = `${base}.png`
@@ -392,7 +408,7 @@ export const startEngineServer = (options: ServerOptions) => {
     status?: string
     withSession?: boolean
   }): Promise<{ evidence: EvidenceWriter; session?: LiveSession }> => {
-    const evidence = createEvidenceWriter(evidenceDir, params.runId)
+    const evidence = createEvidenceWriter(db, params.runId)
     insertRun(db, {
       id: params.runId,
       kind: params.kind,
@@ -403,7 +419,6 @@ export const startEngineServer = (options: ServerOptions) => {
       startedAt: new Date().toISOString(),
       finishedAt: null,
       result: null,
-      evidenceDir: evidence.runDir,
     })
     activeEvidence.set(params.runId, evidence)
     if (params.withSession === false) return { evidence }
@@ -448,7 +463,6 @@ export const startEngineServer = (options: ServerOptions) => {
           session,
           handoff: makeStuckHandoff({
             runId,
-            evidence,
             session,
             contextBase: { capabilityId: capabilityRow.id },
           }),
@@ -465,7 +479,7 @@ export const startEngineServer = (options: ServerOptions) => {
           },
         })
         evidence.writeResult(result)
-        await completeRun(runId, result, evidence)
+        await completeRun(runId, result)
       } catch (err) {
         // ApprovalRequiredError: a risky replay without an approval — the
         // run fails fast and the request becomes an operator-decidable
@@ -475,7 +489,6 @@ export const startEngineServer = (options: ServerOptions) => {
           capabilityId: capabilityRow.id,
           expected: "replay completes",
           observed: err instanceof Error ? err.message : String(err),
-          evidenceDir: evidence.runDir,
           durationMs: 0,
         }
         evidence.writeResult(result)
@@ -507,7 +520,7 @@ export const startEngineServer = (options: ServerOptions) => {
             kind: "approval",
           })
         }
-        await completeRun(runId, result, evidence)
+        await completeRun(runId, result)
       }
     })()
   }
@@ -744,7 +757,6 @@ export const startEngineServer = (options: ServerOptions) => {
           session,
           handoff: makeStuckHandoff({
             runId,
-            evidence,
             session,
             contextBase: { goal: body.goal },
           }),
@@ -777,17 +789,16 @@ export const startEngineServer = (options: ServerOptions) => {
           },
         })
         evidence.writeResult(result)
-        await completeRun(runId, result, evidence)
+        await completeRun(runId, result)
       } catch (err) {
         const result = {
           status: "hard_failure" as const,
           expected: "discovery completes",
           observed: err instanceof Error ? err.message : String(err),
-          evidenceDir: evidence.runDir,
           durationMs: 0,
         }
         evidence.writeResult(result)
-        await completeRun(runId, result, evidence)
+        await completeRun(runId, result)
       }
     })()
     return json(c, 202, { runId })
@@ -836,17 +847,31 @@ export const startEngineServer = (options: ServerOptions) => {
 
   app.get("/runs/:id/evidence", (c) => {
     const row = getRun(db, c.req.param("id"))
-    if (!row || !row.evidenceDir) {
-      return json(c, 404, { error: "run or evidence not found" })
-    }
-    const stepsPath = join(row.evidenceDir, "steps.jsonl")
-    const steps = existsSync(stepsPath)
-      ? readFileSync(stepsPath, "utf8")
-          .split("\n")
-          .filter(Boolean)
-          .map((line) => JSON.parse(line))
-      : []
-    return json(c, 200, { runId: row.id, steps })
+    if (!row) return json(c, 404, { error: "run not found" })
+    return json(c, 200, { runId: row.id, steps: getRunSteps(db, row.id) })
+  })
+
+  // Evidence files (D-059): steps/transcript/result/control JSON, failure
+  // and handoff screenshots + aria snapshots — all stored in run_files.
+  app.get("/runs/:id/files", (c) => {
+    const row = getRun(db, c.req.param("id"))
+    if (!row) return json(c, 404, { error: "run not found" })
+    return json(c, 200, { runId: row.id, files: listRunFiles(db, row.id) })
+  })
+
+  // One stored evidence file, raw bytes with its recorded content type.
+  // Text files were redacted before they were persisted; binary payloads
+  // (screenshots) are served exactly as captured. `:name` is a single path
+  // segment (e.g. "steps.jsonl", "failure-step-11.png").
+  app.get("/runs/:id/files/:name", (c) => {
+    const row = getRun(db, c.req.param("id"))
+    if (!row) return json(c, 404, { error: "run not found" })
+    const file = getRunFile(db, row.id, c.req.param("name"))
+    if (!file) return json(c, 404, { error: "run file not found" })
+    return new Response(new Uint8Array(file.data), {
+      status: 200,
+      headers: { "content-type": file.contentType },
+    })
   })
 
   app.get("/approvals", (c) => json(c, 200, listInterventions(db)))
@@ -1013,7 +1038,7 @@ export const startEngineServer = (options: ServerOptions) => {
           await getBrowser(),
           existingRun.id
         )
-        const evidence = createEvidenceWriter(evidenceDir, existingRun.id)
+        const evidence = createEvidenceWriter(db, existingRun.id)
         activeEvidence.set(existingRun.id, evidence)
         setRunStatus(db, existingRun.id, "running")
         executionRunId = existingRun.id

@@ -202,7 +202,6 @@ export const runHardFailureSchema = z.object({
   step: z.number().int().optional(),
   expected: z.string(),
   observed: z.string(),
-  evidenceDir: z.string().optional(),
   durationMs: z.number(),
 })
 export type RunHardFailure = z.infer<typeof runHardFailureSchema>
@@ -302,7 +301,6 @@ export const engineRunRowSchema = z.object({
   finishedAt: z.string().nullable(),
   /** Structured run result JSON (see engineRunResultSchema), when finished. */
   result: z.string().nullable(),
-  evidenceDir: z.string().nullable(),
 })
 export type EngineRunRow = z.infer<typeof engineRunRowSchema>
 
@@ -381,7 +379,6 @@ export const engineRunSchema = z.object({
   startedAt: z.string(),
   finishedAt: z.string().nullable(),
   result: engineRunResultSchema.nullable(),
-  evidenceDir: z.string().nullable(),
 })
 export type EngineRun = z.infer<typeof engineRunSchema>
 

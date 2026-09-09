@@ -1,5 +1,5 @@
 /**
- * Evidence & observability (assignment §3.5).
+ * Evidence & observability (assignment §3.5, storage per D-059).
  *
  * Every run (discovery or replay) produces:
  * - a structured, per-step JSONL log: action, target, the model's/recorded
@@ -7,16 +7,20 @@
  * - richer failure signals: a screenshot + aria snapshot on every failure,
  *   plus the full model transcript for discovery runs.
  *
- * Everything written passes through policy redaction first. Evidence files
- * live under `<evidenceDir>/runs/<runId>/`:
- *   steps.jsonl        one redacted JSON object per step
+ * Everything written passes through policy redaction first. Evidence lives
+ * in the engine's SQLite DB: one row per file in `run_files`, keyed by
+ * (runId, name) — nothing touches the filesystem.
+ *   steps.jsonl        one redacted JSON object per step (canonical step store)
  *   transcript.json    full model transcript (discovery only, redacted)
  *   result.json        final structured run result (redacted)
+ *   control.json       session ownership log (runs with a live session)
  *   failure-step-N.png screenshot captured when step N failed
  *   failure-step-N.yml aria snapshot captured when step N failed
+ *   handoff-step-N.*   the same capture when a stuck run escalates
+ * Files are served back over the HTTP API at /runs/:id/files[/:name].
  */
-import { mkdirSync, writeFileSync, appendFileSync } from "node:fs"
-import { join } from "node:path"
+import type Database from "better-sqlite3"
+import { getRunFile, putRunFile } from "@/db"
 import { redactValue, redactText } from "@/policy"
 
 /** One structured step event in a run log. */
@@ -37,32 +41,55 @@ export type StepEvidence = {
 }
 
 /**
- * Append-only evidence writer for one run. Construct once per run; call
- * `logStep` as steps complete and `writeArtifact`/`writeResult` at the end.
+ * Evidence writer for one run. Construct once per run; call `logStep` as
+ * steps complete and `writeTranscript`/`writeResult` at the end. Persists
+ * to `run_files` via putRunFile.
  */
-export const createEvidenceWriter = (evidenceDir: string, runId: string) => {
-  const runDir = join(evidenceDir, "runs", runId)
-  mkdirSync(runDir, { recursive: true })
-  const stepsPath = join(runDir, "steps.jsonl")
+export const createEvidenceWriter = (db: Database.Database, runId: string) => {
+  // Logical evidence key ("runs/<runId>"), kept for the writer's public
+  // shape — it names the run's evidence set, NOT a filesystem path.
+  const runDir = `runs/${runId}`
+
+  // steps.jsonl is one blob rewritten on each logged step; the in-memory
+  // buffer seeds from the stored blob so a second writer for the same run
+  // (e.g. the approval-resume path) continues the log instead of
+  // truncating it.
+  const steps: string[] = (
+    getRunFile(db, runId, "steps.jsonl")?.data.toString("utf8") ?? ""
+  )
+    .split("\n")
+    .filter(Boolean)
 
   const logStep = (entry: StepEvidence): void => {
-    const redacted = redactValue(entry)
-    appendFileSync(stepsPath, JSON.stringify(redacted) + "\n")
+    steps.push(JSON.stringify(redactValue(entry)))
+    putRunFile(
+      db,
+      runId,
+      "steps.jsonl",
+      "application/jsonl",
+      Buffer.from(steps.join("\n") + "\n", "utf8")
+    )
   }
 
   /** Persist the full discovery transcript (model messages), redacted. */
   const writeTranscript = (transcript: unknown): void => {
-    writeFileSync(
-      join(runDir, "transcript.json"),
-      JSON.stringify(redactValue(transcript), null, 2)
+    putRunFile(
+      db,
+      runId,
+      "transcript.json",
+      "application/json",
+      Buffer.from(JSON.stringify(redactValue(transcript), null, 2), "utf8")
     )
   }
 
   /** Persist the final structured run result, redacted. */
   const writeResult = (result: unknown): void => {
-    writeFileSync(
-      join(runDir, "result.json"),
-      JSON.stringify(redactValue(result), null, 2)
+    putRunFile(
+      db,
+      runId,
+      "result.json",
+      "application/json",
+      Buffer.from(JSON.stringify(redactValue(result), null, 2), "utf8")
     )
   }
 
@@ -73,12 +100,21 @@ export const createEvidenceWriter = (evidenceDir: string, runId: string) => {
     ariaSnapshot: string | undefined
   ): void => {
     if (screenshot) {
-      writeFileSync(join(runDir, `failure-step-${stepIndex}.png`), screenshot)
+      putRunFile(
+        db,
+        runId,
+        `failure-step-${stepIndex}.png`,
+        "image/png",
+        screenshot
+      )
     }
     if (ariaSnapshot) {
-      writeFileSync(
-        join(runDir, `failure-step-${stepIndex}.yml`),
-        redactText(ariaSnapshot)
+      putRunFile(
+        db,
+        runId,
+        `failure-step-${stepIndex}.yml`,
+        "application/yaml",
+        Buffer.from(redactText(ariaSnapshot), "utf8")
       )
     }
   }

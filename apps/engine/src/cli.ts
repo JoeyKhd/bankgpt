@@ -6,17 +6,16 @@
  *
  * Both print structured JSON results to stdout. Discovery requires
  * OPENROUTER_API_KEY in the environment (loaded via --env-file by the
- * package scripts).
+ * package scripts). Artifacts are read from / written to the engine DB
+ * (D-059); per-run evidence is stored in run_files in the same DB.
  */
 import { chromium } from "playwright"
 import { randomUUID } from "node:crypto"
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
 import { runDiscovery } from "@/discovery"
 import { replayCapability } from "@/replay"
 import { defaultPolicy } from "@/policy"
 import { createEvidenceWriter } from "@/evidence"
-import { openEngineDb, insertCapability } from "@/db"
+import { openEngineDb, insertCapability, getCapability } from "@/db"
 import { CapabilityArtifactSchema } from "@/artifact"
 
 const DEFAULT_MODEL = "google/gemini-2.5-flash"
@@ -60,7 +59,6 @@ const parseArgs = (argv: string[]): CliArgs => {
 }
 
 const ENGINE_DB_PATH = process.env.ENGINE_DB_PATH ?? "data/engine.sqlite"
-const EVIDENCE_DIR = process.env.ENGINE_EVIDENCE_DIR ?? "evidence"
 
 const main = async (): Promise<void> => {
   const args = parseArgs(process.argv)
@@ -78,9 +76,9 @@ const main = async (): Promise<void> => {
       console.error("OPENROUTER_API_KEY is not set")
       process.exit(2)
     }
-    const runId = randomUUID()
-    const evidence = createEvidenceWriter(EVIDENCE_DIR, runId)
     const db = openEngineDb(ENGINE_DB_PATH)
+    const runId = randomUUID()
+    const evidence = createEvidenceWriter(db, runId)
 
     let savedArtifactId: string | undefined
     const result = await runDiscovery({
@@ -92,6 +90,7 @@ const main = async (): Promise<void> => {
       model: args.model ?? DEFAULT_MODEL,
       apiKey,
       onArtifact: (artifact) => {
+        // The distilled artifact lives ONLY in the capabilities table.
         insertCapability(db, {
           id: artifact.id,
           version: artifact.version,
@@ -101,12 +100,6 @@ const main = async (): Promise<void> => {
           createdAt: artifact.createdAt,
           artifact: JSON.stringify(artifact),
         })
-        // Also write the artifact next to the run evidence for review.
-        mkdirSync(join(EVIDENCE_DIR, "artifacts"), { recursive: true })
-        writeFileSync(
-          join(EVIDENCE_DIR, "artifacts", `${artifact.id}.json`),
-          JSON.stringify(artifact, null, 2)
-        )
         savedArtifactId = artifact.id
       },
     })
@@ -120,17 +113,19 @@ const main = async (): Promise<void> => {
       console.error("usage: replay --capability <id> --input key=value ...")
       process.exit(2)
     }
-    // Load the artifact from the evidence artifacts dir (written by discover).
-    const artifactPath = join(
-      EVIDENCE_DIR,
-      "artifacts",
-      `${args.capability}.json`
-    )
-    const artifact = CapabilityArtifactSchema.parse(
-      JSON.parse(readFileSync(artifactPath, "utf8"))
-    )
+    const db = openEngineDb(ENGINE_DB_PATH)
+    // Load the artifact from the capabilities table (written by discover
+    // or imported via POST /capabilities).
+    const row = getCapability(db, args.capability)
+    if (!row) {
+      console.error(
+        `capability "${args.capability}" not found in ${ENGINE_DB_PATH} — run discover first or import the artifact via POST /capabilities`
+      )
+      process.exit(1)
+    }
+    const artifact = CapabilityArtifactSchema.parse(JSON.parse(row.artifact))
     const runId = randomUUID()
-    const evidence = createEvidenceWriter(EVIDENCE_DIR, runId)
+    const evidence = createEvidenceWriter(db, runId)
     const browser = await chromium.launch({ headless: true })
     try {
       const result = await replayCapability({

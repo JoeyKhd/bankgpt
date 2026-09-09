@@ -166,16 +166,11 @@ const RunResultPanel = ({ result }: { result: EngineRunResult }) => {
               label="duration"
               value={formatDurationMs(result.durationMs)}
             />
-            {result.evidenceDir && (
-              <KeyValue label="evidence dir" value={result.evidenceDir} />
-            )}
           </div>
-          {result.evidenceDir && (
-            <p className="text-xs text-muted-foreground">
-              Failure screenshots and snapshots are written to the evidence
-              directory on the engine host.
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground">
+            Failure screenshots and snapshots are stored in the engine database
+            and served at /runs/:id/files/:name.
+          </p>
         </Section>
       )
     case "stuck":

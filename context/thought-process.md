@@ -1636,3 +1636,60 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** `apps/engine/package.json`, `apps/mockbank/package.json`,
   `apps/engine/tsconfig.json`, `apps/mockbank/tsconfig.json`,
   `apps/engine/README.md` (TypeScript toolchain note), `pnpm-lock.yaml`.
+
+### D-059 — 2026-09-09T13:20:00Z — Run evidence moves from the filesystem into the engine SQLite DB
+
+- **Status:** accepted (supersedes the file-based evidence layout adopted
+  in D-041/D-047 and the checked-in `/evidence/` bundle of D-048)
+- **Decision/change:** ALL run evidence now lives in the engine's own
+  SQLite database (`apps/engine/data/engine.sqlite`) instead of the
+  filesystem. A new `run_files` table (`runId, name, contentType, data
+  BLOB, createdAt`, PK `(runId, name)`) stores every evidence file as a
+  blob: `steps.jsonl` (one blob, buffered in the writer and rewritten on
+  each logged step), `transcript.json`, `result.json`, `control.json`,
+  `failure-step-N.png/.yml`, `handoff-step-N.png/.yml`. `createEvidenceWriter`
+  now takes `(db, runId)` and keeps its public shape (`runDir` is a
+  logical key `runs/<runId>`, no longer a path); all redaction
+  (`redactValue`/`redactText`) is unchanged and still applied before
+  persistence. The `runs.evidenceDir` column is dropped (rebuild migration
+  in `openEngineDb`, same pattern as the interventions rebuild; it also
+  strips the dead `evidenceDir` key from stored result JSON), and
+  `ENGINE_EVIDENCE_DIR` is gone. The HTTP API reads evidence back from the
+  DB: `GET /runs/:id/evidence` parses the stored `steps.jsonl` blob, and
+  new `GET /runs/:id/files` (names + content types + sizes) and
+  `GET /runs/:id/files/:name` (raw blob with its content type) serve the
+  binaries the console previously could only point at — the REPORT's "No
+  evidence-binary endpoint" cut is closed. CLI `discover` writes the
+  artifact ONLY to `capabilities`; CLI `replay` reads it from
+  `capabilities` via `getCapability` (implicit-approval semantics kept).
+  The hard-failure result schema drops its `evidenceDir` pointer
+  (engine + frontend mirror). **Assignment deliverable change (§
+  Deliverables #3):** the demonstration evidence is no longer a checked-in
+  `/evidence/` folder; the graded bundle (both on-disk trees:
+  `apps/engine/evidence/` and repo-root `evidence/`) was imported once
+  into the DB with a throwaway tsx script (209 files across 76 runs, 48
+  evidence-only CLI runs given derived `runs` rows; verified byte-identical
+  against the sources, idempotent, script deleted after use) and both
+  folders were then deleted (`evidence/` git-rm'd).
+- **Why:** Owner direction — one durable, queryable store for evidence
+  instead of two diverging trees (engine-local + duplicated repo bundle),
+  and binaries servable over the same HTTP API as the rest of the run
+  record.
+- **Consequences/follow-up:** No `evidence/` folder exists anywhere and no
+  `evidenceDir` concept remains in code or schemas. `apps/engine/data/`
+  stays gitignored, so the graded evidence is LOCAL to the owner's engine
+  DB — the repo no longer ships it as files (it remains in git history);
+  shipping it means sharing the DB or re-importing from history. A fresh
+  clone's engine DB starts empty until runs execute. Redaction behavior,
+  the result taxonomy, the approval/handoff flow, and the WS protocol are
+  unchanged. `AGENTS.md`, `context/what-we-are-building.md`, and
+  `apps/engine/NOTES.md` still describe the retired `/evidence/` layout in
+  places — left for the owner to reword (product-brief/conventions
+  territory). Root format/lint/typecheck/build pass.
+- **References:** `apps/engine/src/db.ts` (`run_files`, `putRunFile` /
+  `getRunFile` / `listRunFiles` / `getRunSteps`, `migrateRuns`),
+  `apps/engine/src/evidence.ts`, `apps/engine/src/server.ts`,
+  `apps/engine/src/cli.ts`, `apps/engine/src/results.ts`,
+  `apps/engine/src/index.ts`, `apps/frontend/lib/engine/schemas.ts`,
+  `apps/frontend/components/admin/run-detail.tsx`, `README.md`,
+  `REPORT.md`, `apps/engine/README.md`; D-041, D-047, D-048.

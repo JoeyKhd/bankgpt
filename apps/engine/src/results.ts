@@ -51,8 +51,6 @@ export const RunHardFailureSchema = z.object({
   step: z.number().int().optional(),
   expected: z.string(),
   observed: z.string(),
-  /** Evidence pointer (screenshot/snapshot under the run evidence dir). */
-  evidenceDir: z.string().optional(),
   durationMs: z.number(),
 })
 

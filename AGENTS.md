@@ -52,7 +52,8 @@ twice. Conventions live in the repository, not only in agent memory.
 - Record concise decision rationales, not raw model transcripts or private
   working notes. Never include secrets, credentials, tokens, or sensitive data.
 - The ledger supports the required `REPORT.md`; it does not replace that report
-  or run evidence in `/evidence/`.
+  or the run evidence stored in the engine SQLite DB (`run_files` table,
+  D-059).
 
 ## Layout
 
@@ -406,6 +407,9 @@ Do not recover by rewriting history unless the user asks.
 
 - Markdown files may be out of sync. Verify claims from documentation against
   current files, execution results, or git history before acting on them.
+- Keep the docs site (`apps/docs`, Fumadocs, port 3001) in sync: when a
+  change alters behavior, the app surface, APIs, ports, or setup, update the
+  matching pages under `apps/docs/content/docs/` in the same change.
 
 ## Context folder
 

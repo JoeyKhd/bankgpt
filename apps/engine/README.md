@@ -39,9 +39,10 @@ goal ─▶ discovery (observe → decide → act, LLM each step) ─▶ capabil
   persisted.
 - **`src/evidence.ts`** — per-step JSONL logs (action, target, reason,
   duration, result), screenshot + aria snapshot on failure, and the full
-  discovery transcript. Everything redacted before writing.
+  discovery transcript. Everything redacted before writing; every file is
+  persisted as a `run_files` blob in SQLite (D-059), never to disk.
 - **`src/db.ts`** — SQLite (better-sqlite3, WAL): capabilities, runs,
-  interventions/approvals.
+  interventions/approvals, and run evidence files (`run_files`).
 - **`src/server.ts`** — Hono HTTP API (@hono/node-server) + WebSocket
   control channel (pause / cede / resume for the live-session handoff),
   bodies validated with @hono/zod-validator. `src/session.ts` holds the
@@ -77,9 +78,11 @@ pnpm --filter engine discover --goal "Log in ... and read balances" \
 pnpm --filter engine replay --capability <id> --input memberId=100231
 ```
 
-Both print structured JSON results. Artifacts land in
-`apps/engine/evidence/artifacts/`, per-run evidence (steps, transcript,
-failure screenshots) in `apps/engine/evidence/runs/<runId>/`.
+Both print structured JSON results. Artifacts are stored in the
+`capabilities` table of the engine DB (`data/engine.sqlite`); per-run
+evidence (steps, transcript, failure screenshots) is stored as blobs in
+its `run_files` table (D-059) and served over the HTTP API at
+`/runs/:id/files[/:name]`.
 
 ## HTTP API (`pnpm --filter engine dev`, default port 4011)
 
@@ -98,7 +101,9 @@ control channel shares the same listener via `upgradeWebSocket`.
 | POST | `/discover` | start a discovery run (async, `{goal, targetUrl, model?}`, 202 + WS) |
 | POST | `/replay` | start a replay run (async, `{capabilityId, inputs, approvalToken?}`, 202 + WS) |
 | GET | `/runs` / `/runs/:id` | run rows (`result` as a JSON string, like the DB row) |
-| GET | `/runs/:id/evidence` | step log for a run |
+| GET | `/runs/:id/evidence` | parsed step log for a run (from the stored `steps.jsonl` blob) |
+| GET | `/runs/:id/files` | a run's stored evidence files (names, content types, sizes) |
+| GET | `/runs/:id/files/:name` | one stored evidence file, raw bytes with its content type |
 | GET | `/approvals` | list interventions/approvals |
 | POST | `/approvals` | request-first approval for a risky capability (creates the run, status `awaiting_approval`, 201 + `{id, runId}`) |
 | GET | `/approvals/:id` | one intervention |
@@ -116,4 +121,4 @@ control messages for the live-session handoff.
 ## Environment
 
 See `.env.example` (names only): `OPENROUTER_API_KEY` (required for
-discovery), `ENGINE_PORT`, `ENGINE_DB_PATH`, `ENGINE_EVIDENCE_DIR`.
+discovery), `ENGINE_PORT`, `ENGINE_DB_PATH`.
