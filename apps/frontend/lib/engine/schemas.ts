@@ -42,14 +42,33 @@ export const capabilityOutputSchema = z.object({
 })
 export type CapabilityOutput = z.infer<typeof capabilityOutputSchema>
 
-export const locatorSchema = z.object({
-  strategy: z.enum(["a11y", "css", "text"]),
-  role: z.string().optional(),
-  name: z.string().optional(),
-  exact: z.boolean().default(true),
-  css: z.string().optional(),
-  text: z.string().optional(),
-})
+// Strict discriminated union mirroring the engine's LocatorSchema
+// (apps/engine/src/artifact.ts): per-strategy required fields, foreign keys
+// rejected. `exact` is accepted on css/text for legacy stored artifacts.
+export const locatorSchema = z.discriminatedUnion("strategy", [
+  z
+    .object({
+      strategy: z.literal("a11y"),
+      role: z.string().min(1),
+      name: z.string().min(1),
+      exact: z.boolean().default(true),
+    })
+    .strict(),
+  z
+    .object({
+      strategy: z.literal("css"),
+      css: z.string().min(1),
+      exact: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      strategy: z.literal("text"),
+      text: z.string().min(1),
+      exact: z.boolean().optional(),
+    })
+    .strict(),
+])
 export type Locator = z.infer<typeof locatorSchema>
 
 export const targetSchema = z.object({

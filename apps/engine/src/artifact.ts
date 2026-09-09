@@ -93,12 +93,20 @@ export const LocatorSchema = z.discriminatedUnion("strategy", [
     .object({
       strategy: z.literal("css"),
       css: z.string().min(1).describe("CSS selector"),
+      // Legacy artifacts (schema before the strict union) carried `exact`
+      // on every variant. It is meaningless for CSS and ignored at replay;
+      // accepted here so stored artifacts keep parsing. Truly foreign keys
+      // (e.g. `value`) are still rejected.
+      exact: z.boolean().optional(),
     })
     .strict(),
   z
     .object({
       strategy: z.literal("text"),
       text: z.string().min(1).describe("Visible text to match"),
+      // Same legacy allowance as css; for text it is honored at replay
+      // (exact vs substring match), defaulting to substring.
+      exact: z.boolean().optional(),
     })
     .strict(),
 ])

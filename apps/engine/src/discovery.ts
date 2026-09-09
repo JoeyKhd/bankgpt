@@ -28,6 +28,7 @@ import { z } from "zod"
 import { chromium, type Browser, type Page } from "playwright"
 import {
   CapabilityArtifactSchema,
+  TargetSchema,
   type CapabilityArtifact,
   type BusinessOutcome,
 } from "@/artifact"
@@ -151,31 +152,10 @@ const DistilledArtifactSchema = z.object({
         "wait",
         "extract",
       ]),
-      target: z
-        .object({
-          primary: z.object({
-            strategy: z.enum(["a11y", "css", "text"]),
-            role: z.string().optional(),
-            name: z.string().optional(),
-            exact: z.boolean().default(true),
-            css: z.string().optional(),
-            text: z.string().optional(),
-          }),
-          fallbacks: z
-            .array(
-              z.object({
-                strategy: z.enum(["a11y", "css", "text"]),
-                role: z.string().optional(),
-                name: z.string().optional(),
-                exact: z.boolean().default(true),
-                css: z.string().optional(),
-                text: z.string().optional(),
-              })
-            )
-            .default([]),
-          robustness: z.string(),
-        })
-        .optional(),
+      // The strict TargetSchema constrains the MODEL to emit parseable
+      // locators in the first place — a loose distill schema lets the model
+      // emit locators the artifact schema then rejects, losing the run.
+      target: TargetSchema.optional(),
       input: z.string().optional(),
       value: z.string().optional(),
       url: z.string().optional(),

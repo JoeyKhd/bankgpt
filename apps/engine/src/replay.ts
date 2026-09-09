@@ -229,7 +229,7 @@ const toLocator = (page: Page, candidate: RecordedLocator): Locator => {
     case "css":
       return page.locator(candidate.css)
     case "text":
-      return page.getByText(candidate.text, { exact: false })
+      return page.getByText(candidate.text, { exact: candidate.exact ?? false })
   }
 }
 

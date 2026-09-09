@@ -1329,3 +1329,34 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** Owner request; `AGENTS.md` ## Stack; D-048 (engine Hono
   migration); commit `e0e0929` (mockbank TypeScript + Hono conversion).
 
+### D-051 — 2026-09-09T11:52:00Z — Strict locator union keeps legacy `exact`; distill schema reuses TargetSchema
+
+- **Status:** accepted (fixes a regression introduced by D-049's strict union)
+- **Decision/change:** (1) The css/text locator variants in
+  `apps/engine/src/artifact.ts` now accept an optional `exact` key. Legacy
+  stored artifacts (schema before the strict union) carry `exact: true` on
+  every variant — e.g. the reviewed `get_member_balances@1.2.1`, whose replay
+  hard-failed at parse with `unrecognized_keys`. Strictness still rejects
+  genuinely foreign keys (`value` on a text locator, missing `css`/`text`).
+  Replay honors `exact` for text locators (default substring) and ignores it
+  for css. (2) The frontend mirror `locatorSchema` in
+  `apps/frontend/lib/engine/schemas.ts` is now the same strict union.
+  (3) `DistilledArtifactSchema` in `apps/engine/src/discovery.ts` now reuses
+  the strict `TargetSchema` instead of a duplicate loose shape, so the
+  distillation MODEL is constrained to emit parseable locators in the first
+  place instead of producing drafts the artifact schema then rejects.
+- **Why:** Owner's manual chat test surfaced the parse failure on replay of
+  the latest reviewed capability. Backward compatibility with already-stored,
+  already-reviewed artifacts is a hard requirement — strictness must reject
+  meaningless shapes without invalidating legitimate legacy ones.
+- **Consequences/follow-up:** Verified by execution: all LATEST stored
+  capability versions parse (get_member_balances@1.2.1, open_sub_account@1.0.0,
+  open_savings_sub_account@1.0.0). Two superseded malformed review drafts
+  (get_member_balances@1.1.0/1.1.1, text fallback missing its value from the
+  D-047 probe work) are still correctly rejected; no execution path resolves
+  them (getCapability picks latest by createdAt). Engine + frontend format /
+  lint / typecheck / build all pass.
+- **References:** Owner's chat bug report; `apps/engine/src/artifact.ts`;
+  `apps/engine/src/replay.ts` (toLocator); `apps/engine/src/discovery.ts`;
+  `apps/frontend/lib/engine/schemas.ts`; D-049.
+
