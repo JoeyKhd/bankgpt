@@ -1543,3 +1543,60 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `apps/frontend/app/(app)/admin/admin-shell.tsx`,
   `apps/frontend/components/admin/interventions-inbox.tsx`,
   `apps/frontend/app/api/chat/route.ts`; D-046, D-047.
+
+### D-057 — 2026-09-09T12:55:10Z — Approval-required suggestion badge; freeze-card + money-market capabilities created
+
+- **Status:** accepted
+- **Decision/change:** Two owner requests, shipped together.
+  (1) **"Needs approval" is now a badge, not plain label text.** The seeded
+  welcome suggestions moved out of `chat-client.tsx` into
+  `apps/frontend/lib/chat-suggestions.ts`, which exports the shared
+  `APPROVAL_REQUIRED_LABEL = "Needs approval"` marker plus the
+  `CHAT_SUGGESTIONS` list. The suggestion model carries only
+  `{ title, label, prompt }` — there is no custom-field channel to the
+  item renderer — so an approval-gated suggestion is marked by setting its
+  label to that constant, and `thread.aui.tsx`'s `SuggestionLabel` (reading
+  `suggestion.label` via `useAuiState`) renders it as an amber pill badge
+  with `ShieldAlertIcon`, matching the invoke tool's existing "approval
+  required" badge. Non-approval labels render as plain secondary text.
+  (2) **Created the capabilities the suggestions referenced but that did
+  not exist.** `freeze_debit_card` was genuinely missing from the engine
+  (it lived only in the offline stub catalog
+  `lib/capabilities-catalog.ts`); ran real engine discovery against
+  mockbank, then HEALED the distilled artifact per the D-052/D-053
+  precedent — the raw distillation hardcoded `(lost)`, had no `reason`
+  input (the model never selected a reason, so the form's default silently
+  won), had an exact unescaped-regex `urlPattern` checkpoint, no CSS
+  fallbacks, and no business outcomes. The healed artifact adds a `reason`
+  enum (display labels "Lost"/"Stolen"/"Fraud suspected"/"Member request" —
+  replay selects by label via `selectOption({ label })`), navigates step 6
+  straight to the card's freeze URL (so an already-frozen card reaches its
+  business-outcome page instead of the link being absent from the member
+  page), a generalized checkpoint, and three business outcomes. The
+  money-market account needed NO new flow: `open_sub_account`'s
+  `accountType` enum already covers it, so that artifact was bumped to
+  v1.1.0 with a type-neutral name/description ("Open sub-account") instead
+  of adding a third duplicate open-account artifact (the ledger already
+  flags the existing duplicates; consolidating them stays a data-migration
+  decision for the owner). Both artifacts are stored `reviewed: true` (DB
+  column + embedded flag kept in sync per D-052) so the risky review gate
+  passes.
+- **Why:** Owner report — the chat showed "Needs approval" as plain text,
+  and several suggestions pointed at capabilities the engine did not
+  actually have.
+- **Consequences/follow-up:** Verified by execution: `freeze_debit_card`
+  replays to `success` (output `cardStatus: "Frozen (lost)"`) and all three
+  business outcomes fire (`card_already_frozen`, `card_not_found`,
+  `member_not_found`); `open_sub_account` v1.1.0 replays `money-market`
+  to `success` (account 7100070001 / CNF-5001); the live catalog
+  (`GET /capabilities`) serves all three referenced capabilities, each
+  reviewed. The CLI loads artifacts from `evidence/artifacts/*.json`, not
+  the DB, so the file copies were updated alongside the DB rows. The
+  discover-then-heal loop reaffirms the D-053 follow-up that distillation
+  checkpoint/enum GENERALIZATION guidance belongs in the distill prompt.
+  Root format/lint/typecheck/build all pass.
+- **References:** `apps/frontend/lib/chat-suggestions.ts`,
+  `apps/frontend/components/assistant-ui/elements/thread.aui.tsx`,
+  `apps/frontend/app/(app)/chat/chat-client.tsx`,
+  `apps/engine/evidence/artifacts/freeze_debit_card.json`,
+  `apps/engine/evidence/artifacts/open_sub_account.json`; D-052, D-053, D-056.

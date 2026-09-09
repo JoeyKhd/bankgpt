@@ -27,6 +27,7 @@ import {
   ZAIIcon,
 } from "@/components/assistant-ui/elements/model-icons"
 import { CHAT_MODELS, DEFAULT_CHAT_MODEL_ID } from "@/lib/chat-models"
+import { CHAT_SUGGESTIONS } from "@/lib/chat-suggestions"
 import { threadListAdapter } from "@/lib/thread-list-adapter"
 import { createDictationAdapter } from "@/lib/dictation"
 import { useEngineEventInvalidation } from "@/lib/engine"
@@ -180,41 +181,7 @@ export const ChatClient = () => {
 
   const config = AuiConfig({
     tools: Tools({ toolkit }),
-    suggestions: Suggestions([
-      {
-        title: "List capabilities",
-        label: "What can you do?",
-        prompt: "What capabilities are available to you?",
-      },
-      {
-        title: "Look up a member",
-        label: "Member 100231 balances",
-        prompt: "Look up member 100231 and read their current balances.",
-      },
-      {
-        title: "Look up a member",
-        label: "Member 100774 balances",
-        prompt: "Look up member 100774 and read their current balances.",
-      },
-      {
-        title: "Open a sub-account",
-        label: "Needs approval",
-        prompt:
-          "Open a savings sub-account for member 100231 with an initial deposit of $250.",
-      },
-      {
-        title: "Freeze a debit card",
-        label: "Needs approval",
-        prompt:
-          "Freeze debit card ending 4412 for member 100231 — the card was lost.",
-      },
-      {
-        title: "Money-market account",
-        label: "Needs approval",
-        prompt:
-          "Open a money-market sub-account for member 100774 with an initial deposit of $1,000.",
-      },
-    ]),
+    suggestions: Suggestions(CHAT_SUGGESTIONS),
   })
 
   return (

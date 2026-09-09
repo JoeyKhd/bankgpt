@@ -26,6 +26,7 @@ import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-ic
 import { useMounted } from "@/hooks/use-mounted"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { APPROVAL_REQUIRED_LABEL } from "@/lib/chat-suggestions"
 import { cn } from "@/lib/utils"
 import { subscribeDictationErrors } from "@/lib/dictation"
 import {
@@ -58,6 +59,7 @@ import {
   MoreHorizontalIcon,
   PencilIcon,
   RefreshCwIcon,
+  ShieldAlertIcon,
   SquareIcon,
 } from "lucide-react"
 import {
@@ -257,6 +259,27 @@ const ThreadSuggestions: FC = () => {
   )
 }
 
+// The suggestion model has no custom-field channel (title/label/prompt
+// only), so approval-gated suggestions carry APPROVAL_REQUIRED_LABEL as
+// their label; render that marker as a badge (matching the invoke tool's
+// "approval required" badge) instead of plain secondary text.
+const SuggestionLabel: FC = () => {
+  const label = useAuiState((s) => s.suggestion.label)
+  if (label === APPROVAL_REQUIRED_LABEL) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-300">
+        <ShieldAlertIcon className="size-3" />
+        {label}
+      </span>
+    )
+  }
+  return (
+    <span className="aui-thread-welcome-suggestion-text-2 empty:hidden">
+      {label}
+    </span>
+  )
+}
+
 const ThreadSuggestionItem: FC = () => {
   return (
     <div className="aui-thread-welcome-suggestion-display animate-in duration-200 fill-mode-both fade-in slide-in-from-bottom-2">
@@ -270,7 +293,7 @@ const ThreadSuggestionItem: FC = () => {
         }
       >
         <SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1" />
-        <SuggestionPrimitive.Description className="aui-thread-welcome-suggestion-text-2 empty:hidden" />
+        <SuggestionLabel />
       </SuggestionPrimitive.Trigger>
     </div>
   )
