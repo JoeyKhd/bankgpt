@@ -1969,3 +1969,33 @@ BLOB, createdAt`, PK `(runId, name)`) stores every evidence file as a
 - **References:** `apps/engine/src/seed.ts`, `apps/engine/seeds/`,
   `apps/engine/src/server.ts`, `apps/engine/Dockerfile`,
   `apps/docs/content/docs/running-locally.mdx`.
+
+## D-069 — 2026-09-09T18:49:59Z — Seed all four mockbank capabilities; fix distiller first-draft bugs
+
+- **Status:** accepted
+- **Decision/change:** Completed the capability set so every `/chat`
+  suggestion works out of the box. Discovered and reviewed
+  `freeze_debit_card` and `open_money_market_sub_account`, then fixed four
+  distiller first-draft mistakes found while testing replay:
+  `get_member_balances` (v1.0.4) — username/password made optional (mock
+  teller accepts any credentials) and the savings extract regex generalized
+  from the hardcoded nickname `Rainy day` to `savings \d+[^\n]*?\$…` so
+  any member works; `freeze_debit_card` (v1.0.3) — replaced the ambiguous
+  `text:Freeze` locator (matched the already-Frozen sibling card) with the
+  a11y link `Freeze card`, added the missing confirm-submit step the
+  distiller dropped, and generalized the checkpoint to `is now Frozen` (was
+  hardcoded to one card's network/reason). All four artifacts are reviewed,
+  replay-tested green end-to-end via the approval flow, and committed to
+  `apps/engine/seeds/`.
+- **Why:** The owner asked that all capabilities be added properly and
+  tested, and that the seeder + compose reflect them. Testing replay
+  against multiple members surfaced that distiller first drafts over-fit to
+  the single discovery example (nicknames, card specifics, optional creds).
+- **Consequences/follow-up:** Fresh environments (engine-data-v2 volume)
+  seed four reviewed, replay-tested capabilities — all six `/chat`
+  suggestions work. `get_member_balances` no longer prompts the caller for
+  credentials. The `freeze` capability correctly reports `already frozen`
+  as a business outcome on a second run.
+- **References:** `apps/engine/seeds/*.json` (4 artifacts),
+  `docker-compose.yaml` (engine-data-v2), D-067 (PUT route used to apply
+  fixes), D-068 (seeder).

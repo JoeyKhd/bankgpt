@@ -1,0 +1,283 @@
+{
+  "id": "open_money_market_sub_account",
+  "version": "1.0.0",
+  "name": "Open Money-Market Sub-Account",
+  "description": "Opens a money-market sub-account for a specified member with an initial deposit.",
+  "goal": "Open a money-market sub-account for member 100774 with an initial deposit of $1,000",
+  "targetApp": "http://mockbank:4010",
+  "risk": "risky",
+  "createdAt": "2026-09-09T18:28:53.059Z",
+  "discoveryModel": "google/gemini-2.5-flash",
+  "discoveryRunId": "50b67923-3524-4628-9f96-c83491bf3437",
+  "inputs": [
+    {
+      "name": "memberId",
+      "type": "string",
+      "required": true,
+      "description": "The ID of the member for whom to open the sub-account."
+    },
+    {
+      "name": "initialDeposit",
+      "type": "number",
+      "required": true,
+      "description": "The initial deposit amount for the sub-account in USD."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "accountNumber",
+      "type": "string",
+      "description": "The newly created sub-account number."
+    },
+    {
+      "name": "confirmationNumber",
+      "type": "string",
+      "description": "The confirmation number for the sub-account opening."
+    },
+    {
+      "name": "accountBalance",
+      "type": "string",
+      "description": "The balance of the newly opened account."
+    }
+  ],
+  "steps": [
+    {
+      "intent": "Log in to the application.",
+      "action": "type",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "textbox",
+          "name": "Username",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "table.tbl > tbody > tr.row > td.cell > label > input"
+          }
+        ],
+        "robustness": "The username textbox is consistently labeled and locatable by its accessible name and CSS path within the login form."
+      },
+      "value": "test"
+    },
+    {
+      "intent": "Enter password.",
+      "action": "type",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "textbox",
+          "name": "Password",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "table.tbl > tbody > tr.row > td.cell > label > input"
+          }
+        ],
+        "robustness": "The password textbox is consistently labeled and locatable by its accessible name and CSS path within the login form."
+      },
+      "value": "test"
+    },
+    {
+      "intent": "Click login button.",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "button",
+          "name": "Log in",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "The 'Log in' button is clearly identified by its accessible name."
+      }
+    },
+    {
+      "intent": "Search for the member by ID.",
+      "action": "type",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "textbox",
+          "name": "Member ID or name",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "table.tbl > tbody > tr.row > td.cell > label > input"
+          }
+        ],
+        "robustness": "The member ID search box is consistently labeled and locatable by its accessible name and CSS path on the dashboard."
+      },
+      "value": "{{memberId}}"
+    },
+    {
+      "intent": "Click search button.",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "button",
+          "name": "Search",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "The search button is clearly identified by its accessible name."
+      }
+    },
+    {
+      "intent": "View the member's profile.",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "link",
+          "name": "View member",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "The 'View member' link appears consistently on search results pages."
+      }
+    },
+    {
+      "intent": "Navigate to open sub-account page.",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "link",
+          "name": "Open sub-account",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "The 'Open sub-account' link is directly available on the member's profile page."
+      }
+    },
+    {
+      "intent": "Select money-market account type.",
+      "action": "select",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "combobox",
+          "name": "Account type",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "table.tbl > tbody > tr.row > td.cell > label > select"
+          }
+        ],
+        "robustness": "The account type dropdown is consistently labeled and locatable by its accessible name and CSS path on the new account form."
+      },
+      "value": "money-market"
+    },
+    {
+      "intent": "Enter initial deposit amount.",
+      "action": "type",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "textbox",
+          "name": "Initial deposit (USD)",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "table.tbl > tbody > tr.row > td.cell > label > input"
+          }
+        ],
+        "robustness": "The initial deposit textbox is consistently labeled and locatable by its accessible name and CSS path on the new account form."
+      },
+      "value": "{{initialDeposit}}"
+    },
+    {
+      "intent": "Continue to review page.",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "button",
+          "name": "Continue",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "The 'Continue' button is a standard element for proceeding through forms."
+      }
+    },
+    {
+      "intent": "Confirm details and authorize.",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "checkbox",
+          "name": "I confirm these details are correct and authorize opening this sub-account.",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "table.tbl > tbody > tr.row > td.cell > label > input"
+          }
+        ],
+        "robustness": "The confirmation checkbox is clearly labeled and locatable by its accessible name and CSS path on the review page."
+      }
+    },
+    {
+      "intent": "Finalize sub-account creation.",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "button",
+          "name": "Open sub-account",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "The 'Open sub-account' button is the final action to create the account on the review page."
+      }
+    },
+    {
+      "intent": "Extract account number",
+      "action": "extract",
+      "outputName": "accountNumber",
+      "extractKind": "page-text-match",
+      "pattern": "Account number (\\d+)"
+    },
+    {
+      "intent": "Extract confirmation number",
+      "action": "extract",
+      "outputName": "confirmationNumber",
+      "extractKind": "page-text-match",
+      "pattern": "Confirmation number (CNF-\\d+)"
+    },
+    {
+      "intent": "Extract account balance",
+      "action": "extract",
+      "outputName": "accountBalance",
+      "extractKind": "page-text-match",
+      "pattern": "Balance (\\$[\\d,]+\\.\\d{2})"
+    }
+  ],
+  "checkpoint": {
+    "urlPattern": "http://mockbank:4010/members/{{memberId}}/accounts/\\d+/confirmation",
+    "visibleText": "The sub-account was opened successfully."
+  },
+  "businessOutcomes": [
+    {
+      "code": "member_not_found",
+      "description": "No member exists with the requested ID \u2014 a legitimate answer, not a failure.",
+      "detect": {
+        "visibleText": "No member found"
+      }
+    }
+  ],
+  "reviewed": true
+}

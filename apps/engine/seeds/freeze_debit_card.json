@@ -1,54 +1,32 @@
 {
-  "id": "get_member_balances",
-  "version": "1.0.4",
-  "name": "Get Member Balances",
-  "description": "Log in to the teller console and retrieve a member's savings and checking balances.",
-  "goal": "Log in to the teller console and read member 100231's savings and checking balances",
+  "id": "freeze_debit_card",
+  "version": "1.0.3",
+  "name": "Freeze Debit Card",
+  "description": "Freeze a specific debit card for a given member, e.g., if it was lost or stolen.",
+  "goal": "Freeze the debit card ending 4412 for member 100231 \u2014 the card was lost",
   "targetApp": "http://mockbank:4010",
-  "risk": "safe",
-  "createdAt": "2026-09-09T18:35:13.000Z",
+  "risk": "risky",
+  "createdAt": "2026-09-09T18:49:15.000Z",
   "discoveryModel": "google/gemini-2.5-flash",
-  "discoveryRunId": "4d0aecc1-83de-4ac2-926b-f0b1710d020c",
+  "discoveryRunId": "789a0d60-ff5e-4a72-8824-d5598638c527",
   "inputs": [
-    {
-      "name": "username",
-      "type": "string",
-      "required": false,
-      "description": "Teller console username. OPTIONAL \u2014 the mock teller console accepts ANY credentials, so the agent may omit this or supply any value (e.g. 'teller')."
-    },
-    {
-      "name": "password",
-      "type": "string",
-      "required": false,
-      "description": "Teller console password. OPTIONAL \u2014 the mock teller console accepts ANY credentials, so the agent may omit this or supply any value (e.g. 'password')."
-    },
     {
       "name": "memberId",
       "type": "string",
       "required": true,
-      "description": "The ID of the member to look up"
-    }
-  ],
-  "outputs": [
-    {
-      "name": "savingsBalance",
-      "type": "string",
-      "description": "The savings account balance for the member"
+      "description": "The ID of the member whose card needs to be frozen."
     },
     {
-      "name": "checkingBalance",
+      "name": "cardLastFourDigits",
       "type": "string",
-      "description": "The checking account balance for the member"
+      "required": true,
+      "description": "The last four digits of the debit card to freeze."
     }
   ],
+  "outputs": [],
   "steps": [
     {
-      "intent": "Navigate to the login page",
-      "action": "navigate",
-      "url": "http://mockbank:4010/login"
-    },
-    {
-      "intent": "Type username",
+      "intent": "Log in to the application.",
       "action": "type",
       "target": {
         "primary": {
@@ -63,12 +41,12 @@
             "css": "table.tbl > tbody > tr.row > td.cell > label > input"
           }
         ],
-        "robustness": "The username field is consistently labeled 'Username' and has a stable CSS path within the login form."
+        "robustness": "The username textbox is consistently labeled and accessible, with a fallback to its CSS path within a common table structure."
       },
-      "value": "{{username}}"
+      "value": "user"
     },
     {
-      "intent": "Type password",
+      "intent": "Enter password.",
       "action": "type",
       "target": {
         "primary": {
@@ -83,12 +61,12 @@
             "css": "table.tbl > tbody > tr.row > td.cell > label > input"
           }
         ],
-        "robustness": "The password field is consistently labeled 'Password' and has a stable CSS path within the login form."
+        "robustness": "The password textbox is consistently labeled and accessible, with a fallback to its CSS path within a common table structure."
       },
-      "value": "{{password}}"
+      "value": "user"
     },
     {
-      "intent": "Click login button",
+      "intent": "Click the Log in button.",
       "action": "click",
       "target": {
         "primary": {
@@ -102,7 +80,7 @@
       }
     },
     {
-      "intent": "Type member ID into search",
+      "intent": "Search for the member by their ID.",
       "action": "type",
       "target": {
         "primary": {
@@ -117,12 +95,12 @@
             "css": "table.tbl > tbody > tr.row > td.cell > label > input"
           }
         ],
-        "robustness": "The member search field is consistently labeled 'Member ID or name' and has a stable CSS path on the dashboard."
+        "robustness": "The member search input is clearly labeled, providing both an accessible name and a robust CSS selector."
       },
       "value": "{{memberId}}"
     },
     {
-      "intent": "Click search button",
+      "intent": "Initiate the search.",
       "action": "click",
       "target": {
         "primary": {
@@ -132,11 +110,11 @@
           "exact": true
         },
         "fallbacks": [],
-        "robustness": "The search button is reliably identified by its accessible name 'Search'."
+        "robustness": "The search button is consistently identified by its accessible name 'Search'."
       }
     },
     {
-      "intent": "Click view member link",
+      "intent": "Navigate to the member's details page.",
       "action": "click",
       "target": {
         "primary": {
@@ -146,27 +124,46 @@
           "exact": true
         },
         "fallbacks": [],
-        "robustness": "The link to view member details is consistently labeled 'View member'."
+        "robustness": "The 'View member' link is a direct and unambiguous way to access member details after a search."
       }
     },
     {
-      "intent": "Extract savings balance",
-      "action": "extract",
-      "outputName": "savingsBalance",
-      "extractKind": "page-text-match",
-      "pattern": "savings \\d+[^\\n]*?\\$(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{2}))"
+      "intent": "Click the 'Freeze' action for the specified card.",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "link",
+          "name": "Freeze card",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "Only an active card renders a 'Freeze card' link; an already-frozen card shows an em-dash, so the name is unique per member page."
+      }
     },
     {
-      "intent": "Extract checking balance",
-      "action": "extract",
-      "outputName": "checkingBalance",
-      "extractKind": "page-text-match",
-      "pattern": "checking \\d+ - \\$(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{2}))"
+      "intent": "Confirm the freeze on the confirmation page (reason select defaults to Lost).",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "button",
+          "name": "Freeze card",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "form[method=\"post\"] button[type=\"submit\"]"
+          }
+        ],
+        "robustness": "The freeze confirmation page has a single submit button labeled 'Freeze card'."
+      }
     }
   ],
   "checkpoint": {
     "urlPattern": "http://mockbank:4010/members/{{memberId}}",
-    "visibleText": "Accounts",
+    "visibleText": "is now Frozen",
     "timeoutMs": 10000
   },
   "businessOutcomes": [
