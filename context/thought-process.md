@@ -1172,3 +1172,39 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   evidence refetch (interim until the WS live-session UI lands).
 - **References:** `apps/frontend/app/(app)/admin/`,
   `apps/frontend/lib/engine/NOTES.md`; D-024, D-044, D-045.
+
+### D-047 — 2026-09-09T09:43:30Z — Approval segregation + live-session handoff (recovered after worker interruption)
+
+- **Status:** accepted (Phase 2 + assignment §3.5). Recovered from an
+  interrupted worker: feature code was committed (commits be5fb31, 7b2a9fd,
+  9131012, 19f18ae); this ledger entry and the proof-run evidence were
+  still pending.
+- **Decision/change:** (1) **Approval segregation** — a risky capability
+  invoked in `/chat` now raises an identity-carrying approval/intervention
+  decided by a *different* authenticated operator in `/admin/interventions`
+  instead of the requesting user self-approving; approval tokens are scoped
+  per capability/run; approver identity + timestamp + reason are persisted
+  as evidence. Safe capabilities still replay straight through; the stub
+  catalog remains only as an offline+safe fallback. (2) **Live-session
+  handoff** — runs execute on registered `LiveSession`s; stuck detection
+  raises an intervention carrying goal/capability, step, state, and reason;
+  `/admin/interventions` provides a take-over panel (live state via
+  `GET /api/engine/sessions/[runId]/state`, actions via
+  `.../action`) with pause/cede/resume over the WebSocket control channel;
+  human actions are recorded; control ownership is explicit. (3) **WS
+  transport** — because Next.js route handlers cannot proxy WebSocket
+  upgrades, the browser connects directly to the engine's `/ws` via
+  `NEXT_PUBLIC_ENGINE_WS_URL` (name-only in `.env.example`), resolving the
+  D-044 open note. New proxy routes: `/api/engine/sessions/[runId]/state`
+  and `/action`.
+- **Why:** Regulated back-office actions need maker-checker (the requester
+  must never approve their own consequential action), and the assignment
+  requires a real pause → operator-take-over → resume against the same live
+  session.
+- **Consequences/follow-up:** The genuine approval + stuck-take-over proof
+  runs (the worker's temp evidence drivers were lost on interruption) are
+  re-captured by the refactor worker and land under `/evidence/runs/`;
+  engine NOTES gap list updated accordingly.
+- **References:** `apps/engine/src/session.ts`, `src/server.ts`,
+  `apps/frontend/app/(app)/admin/interventions/`,
+  `apps/frontend/lib/engine/ws.ts`; assignment §3.5; D-044, D-045.
