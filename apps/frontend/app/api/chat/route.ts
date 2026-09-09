@@ -10,7 +10,6 @@ import { headers } from "next/headers"
 
 import toolkit from "@/app/(app)/chat/toolkit"
 import { auth } from "@/lib/auth"
-import { getCapabilityRisk } from "@/lib/capabilities-catalog"
 import {
   DEFAULT_CHAT_MODEL_ID,
   isChatModelId,
@@ -31,8 +30,8 @@ How you work:
 Rules:
 - NEVER describe driving an application's UI yourself. All work in target systems goes through capabilities; the automation engine replays them deterministically with no model in the loop.
 - If no capability fits the request, say so plainly and suggest that a human operator record one in the admin console's discovery flow.
-- Risky capabilities pause for human approval before running. Tell the user you are waiting for the operator's decision; never pressure them.
-- Quote returned values exactly. Mention that results come from a stub catalog until the automation engine is connected.
+- Risky capabilities are NOT approved by the requester. Invoking one raises an operator-decidable request; a DIFFERENT operator approves or rejects it in the admin console's Interventions inbox, and the run starts automatically once approved. When you invoke a risky capability, tell the user you have raised the request and are waiting for the operator; never pressure them and never offer to approve it yourself.
+- Quote returned values exactly. When the engine is offline the tool falls back to a stub catalog for safe capabilities (and says so); risky capabilities require the engine.
 - Be concise. Lead with the outcome.`
 
 const openrouter = createOpenRouter()
@@ -88,17 +87,9 @@ export const POST = async (req: Request) => {
     messages,
     tools: await aiToolkit.tools({ frontend: body.tools }),
     stopWhen: stepCountIs(8),
-    toolApproval: {
-      // The safety policy from the assignment, applied at the caller seam:
-      // risky/irreversible capabilities pause for a human decision; safe ones
-      // run straight through. Unknown capabilities fail inside execute.
-      invoke_capability: (input) => {
-        const { capabilityId } = input as { capabilityId?: string }
-        return capabilityId && getCapabilityRisk(capabilityId) === "risky"
-          ? "user-approval"
-          : "not-applicable"
-      },
-    },
+    // No requester-side approval gate (D-046): the requester must NOT be the
+    // approver. Risky invocation goes through the segregated approval flow
+    // inside the tool (a different operator decides in /admin/interventions).
   })
 
   return result.toUIMessageStreamResponse({

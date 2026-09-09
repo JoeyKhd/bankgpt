@@ -14,6 +14,7 @@ import { LayoutDashboardIcon } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 
+import { EngineProviders } from "@/components/admin/engine-providers"
 import { Thread } from "@/components/assistant-ui/elements/thread.aui"
 import { ThreadList } from "@/components/assistant-ui/elements/thread-list.aui"
 import { ModelSelector } from "@/components/assistant-ui/elements/model-selector.aui"
@@ -171,44 +172,46 @@ export const ChatClient = () => {
   })
 
   return (
-    <AssistantRuntimeProvider runtime={runtime} config={config}>
-      <div className="flex h-dvh">
-        <aside className="hidden w-64 shrink-0 flex-col border-r border-white/6 bg-card/40 sm:flex">
-          <div className="flex items-center gap-2.5 border-b border-white/6 px-4 py-3">
-            <Image
-              src="/bankgpt-mark.svg"
-              alt="BankGPT"
-              width={40}
-              height={24}
-              className="shrink-0"
-            />
-            <span className="truncate text-sm font-semibold">BankGPT</span>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-2">
-            <ThreadList />
-          </div>
-          <div className="border-t border-white/6 p-2">
-            <Link
-              href="/admin"
-              className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <LayoutDashboardIcon className="size-4" />
-              Console
-            </Link>
-          </div>
-        </aside>
-        <main className="flex min-w-0 flex-1 flex-col">
-          <header className="flex items-center justify-between gap-3 border-b border-white/6 px-4 py-3 sm:px-6">
-            <span className={monoEyebrow}>Caller simulation</span>
-            <TokenUsage />
-          </header>
-          <div className="min-h-0 flex-1">
-            <Thread
-              components={{ Welcome, ComposerLeft: ComposerModelSelector }}
-            />
-          </div>
-        </main>
-      </div>
-    </AssistantRuntimeProvider>
+    <EngineProviders>
+      <AssistantRuntimeProvider runtime={runtime} config={config}>
+        <div className="flex h-dvh">
+          <aside className="hidden w-64 shrink-0 flex-col border-r border-white/6 bg-card/40 sm:flex">
+            <div className="flex items-center gap-2.5 border-b border-white/6 px-4 py-3">
+              <Image
+                src="/bankgpt-mark.svg"
+                alt="BankGPT"
+                width={40}
+                height={24}
+                className="shrink-0"
+              />
+              <span className="truncate text-sm font-semibold">BankGPT</span>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              <ThreadList />
+            </div>
+            <div className="border-t border-white/6 p-2">
+              <Link
+                href="/admin"
+                className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <LayoutDashboardIcon className="size-4" />
+                Console
+              </Link>
+            </div>
+          </aside>
+          <main className="flex min-w-0 flex-1 flex-col">
+            <header className="flex items-center justify-between gap-3 border-b border-white/6 px-4 py-3 sm:px-6">
+              <span className={monoEyebrow}>Caller simulation</span>
+              <TokenUsage />
+            </header>
+            <div className="min-h-0 flex-1">
+              <Thread
+                components={{ Welcome, ComposerLeft: ComposerModelSelector }}
+              />
+            </div>
+          </main>
+        </div>
+      </AssistantRuntimeProvider>
+    </EngineProviders>
   )
 }

@@ -1,6 +1,6 @@
 "use generative"
 
-import { defineToolkit, type ToolApprovalResponse } from "@assistant-ui/react"
+import { defineToolkit } from "@assistant-ui/react"
 import {
   AlertTriangleIcon,
   CheckCircle2Icon,
@@ -10,15 +10,15 @@ import {
   ShieldCheckIcon,
   XCircleIcon,
 } from "lucide-react"
-import { useState } from "react"
 import { z } from "zod"
 
-import { Button } from "@/components/ui/button"
 import type {
   Capability,
   InvokeCapabilityResult,
 } from "@/lib/capabilities-catalog"
 import { invokeStubCapability } from "@/lib/capabilities-catalog"
+import type { InvokeLiveResult } from "@/lib/engine/invoke"
+import type { EngineCapability } from "@/lib/engine"
 
 const monoEyebrow =
   "font-mono text-xs font-medium uppercase tracking-[0.14em] text-emerald-300/80"
@@ -42,50 +42,96 @@ const TypeChip = ({ children }: { children: React.ReactNode }) => (
   </span>
 )
 
-const CapabilityCard = ({ capability }: { capability: Capability }) => (
-  <div className="flex flex-col gap-3 rounded-2xl border border-white/6 bg-card/60 p-4">
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-sm font-semibold text-foreground">
-        {capability.name}
-      </span>
-      <span className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-xs text-muted-foreground">
-        v{capability.version}
-      </span>
-      <RiskBadge risk={capability.risk} />
-    </div>
-    <p className="text-sm leading-relaxed text-muted-foreground">
-      {capability.description}
-    </p>
-    <div className="flex flex-col gap-1.5">
-      <span className={monoEyebrow}>Inputs</span>
-      <div className="flex flex-wrap gap-1.5">
-        {capability.inputs.map((input) => (
-          <TypeChip key={input.name}>
-            {input.name}
-            {input.required ? "*" : ""}:{" "}
-            {input.type === "enum" ? input.values?.join(" | ") : input.type}
-          </TypeChip>
-        ))}
+// Normalize a stub-catalog capability and a live engine capability to one
+// shape for display. The stub carries flat fields; the engine nests them in
+// the artifact.
+type DisplayCapability = {
+  id: string
+  version: string
+  name: string
+  description: string
+  targetApp: string
+  risk: "safe" | "risky"
+  inputs: readonly {
+    name: string
+    type: string
+    required: boolean
+    values?: readonly string[]
+  }[]
+  outputs: readonly { name: string; type: string }[]
+  stepCount: number
+}
+
+const toDisplayCapability = (
+  capability: Capability | EngineCapability
+): DisplayCapability => {
+  if ("artifact" in capability) {
+    return {
+      id: capability.id,
+      version: capability.version,
+      name: capability.name,
+      description: capability.artifact.description,
+      targetApp: capability.artifact.targetApp,
+      risk: capability.risk,
+      inputs: capability.artifact.inputs,
+      outputs: capability.artifact.outputs,
+      stepCount: capability.artifact.steps.length,
+    }
+  }
+  return capability
+}
+
+const CapabilityCard = ({
+  capability,
+}: {
+  capability: Capability | EngineCapability
+}) => {
+  const display = toDisplayCapability(capability)
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-white/6 bg-card/60 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold text-foreground">
+          {display.name}
+        </span>
+        <span className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-xs text-muted-foreground">
+          v{display.version}
+        </span>
+        <RiskBadge risk={display.risk} />
+      </div>
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        {display.description}
+      </p>
+      <div className="flex flex-col gap-1.5">
+        <span className={monoEyebrow}>Inputs</span>
+        <div className="flex flex-wrap gap-1.5">
+          {display.inputs.map((input) => (
+            <TypeChip key={input.name}>
+              {input.name}
+              {input.required ? "*" : ""}:{" "}
+              {input.type === "enum" ? input.values?.join(" | ") : input.type}
+            </TypeChip>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <span className={monoEyebrow}>Outputs</span>
+        <div className="flex flex-wrap gap-1.5">
+          {display.outputs.map((output) => (
+            <TypeChip key={output.name}>
+              {output.name}: {output.type}
+            </TypeChip>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center justify-between border-t border-white/6 pt-2.5 text-[11px] text-muted-foreground/80">
+        <span>
+          {display.targetApp} · {display.stepCount} steps
+        </span>
+        <span className="font-mono">{display.id}</span>
       </div>
     </div>
-    <div className="flex flex-col gap-1.5">
-      <span className={monoEyebrow}>Outputs</span>
-      <div className="flex flex-wrap gap-1.5">
-        {capability.outputs.map((output) => (
-          <TypeChip key={output.name}>
-            {output.name}: {output.type}
-          </TypeChip>
-        ))}
-      </div>
-    </div>
-    <div className="flex items-center justify-between border-t border-white/6 pt-2.5 text-[11px] text-muted-foreground/80">
-      <span>
-        {capability.targetApp} · {capability.stepCount} steps
-      </span>
-      <span className="font-mono">{capability.id}</span>
-    </div>
-  </div>
-)
+  )
+}
 
 const CapabilityListSkeleton = () => (
   <div className="flex flex-col gap-3">
@@ -141,127 +187,159 @@ const OutputsTable = ({
   </div>
 )
 
-const CapabilityListUI = ({ result }: { result?: readonly Capability[] }) =>
+// ── Capability list ──────────────────────────────────────────────────────
+
+// The list tool shows the live engine catalog; when the engine is offline it
+// clearly labels the stub catalog so the demo stays navigable.
+type ListResult =
+  | { source: "live"; capabilities: EngineCapability[] }
+  | { source: "stub"; capabilities: readonly Capability[] }
+
+const CapabilityListUI = ({ result }: { result?: ListResult }) =>
   result === undefined ? (
     <CapabilityListSkeleton />
   ) : (
     <div className="flex flex-col gap-3">
-      {result.map((capability) => (
+      {result.capabilities.map((capability) => (
         <CapabilityCard key={capability.id} capability={capability} />
       ))}
       <p className="text-[11px] text-muted-foreground/70">
-        Stub catalog — real capabilities appear here once the automation engine
-        records them.
+        {result.source === "live"
+          ? "Live catalog from the automation engine."
+          : "Engine offline — showing the stub catalog. Start it with `pnpm --filter engine dev`."}
       </p>
     </div>
   )
 
+// ── invoke_capability render ─────────────────────────────────────────────
+
+// The result the tool produces: a live engine outcome, or a stub outcome
+// (only possible for SAFE capabilities when the engine is offline).
+type InvokeResult =
+  | { source: "live"; live: InvokeLiveResult }
+  | { source: "stub"; stub: InvokeCapabilityResult }
+
+const WaitingForOperator = ({
+  capabilityId,
+  inputs,
+}: {
+  capabilityId?: string
+  inputs: Record<string, unknown>
+}) => (
+  <div className="flex flex-col gap-3 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4">
+    <div className="flex items-center gap-2">
+      <Loader2Icon className="size-4 animate-spin text-amber-300" />
+      <span className="text-sm font-semibold text-amber-200">
+        Waiting for an operator to approve{" "}
+        <span className="font-mono">{capabilityId ?? "…"}</span>
+      </span>
+    </div>
+    <p className="text-xs leading-relaxed text-muted-foreground">
+      This capability performs a consequential action. A request was raised with
+      your inputs and is now in the{" "}
+      <span className="font-medium text-foreground">Interventions</span> inbox,
+      where a different operator approves or rejects it. You cannot approve your
+      own request. The run starts automatically once approved.
+    </p>
+    {Object.keys(inputs).length > 0 && <InputsTable inputs={inputs} />}
+  </div>
+)
+
 const InvokeCapabilityUI = ({
   args,
   result,
-  approval,
-  respondToApproval,
 }: {
-  // Args stream in partially, so every field can be absent mid-stream.
   args?: Partial<{
     capabilityId: string
     inputs: Record<string, unknown>
   }>
-  result?: InvokeCapabilityResult
-  approval?: {
-    approved?: boolean
-    reason?: string
-    resolution?: unknown
-    isAutomatic?: boolean
-  }
-  respondToApproval: (response: ToolApprovalResponse) => Promise<void>
+  result?: InvokeResult
 }) => {
-  const [error, setError] = useState<string | null>(null)
-
-  const answer = async (response: ToolApprovalResponse) => {
-    setError(null)
-    try {
-      await respondToApproval(response)
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure))
-    }
-  }
-
   const inputs = args?.inputs ?? {}
-  const hasInputs = Object.keys(inputs).length > 0
 
-  if (approval?.approved === undefined && approval?.resolution === undefined) {
-    return (
-      <div className="flex flex-col gap-3 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4">
-        <div className="flex items-center gap-2">
-          <AlertTriangleIcon className="size-4 text-amber-300" />
-          <span className="text-sm font-semibold text-amber-200">
-            Approval required to run{" "}
-            <span className="font-mono">{args?.capabilityId ?? "…"}</span>
-          </span>
-        </div>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          This capability performs a consequential action in the target system.
-          It only runs after a human approves it — the same policy the replay
-          engine enforces in production.
-        </p>
-        {hasInputs && <InputsTable inputs={inputs} />}
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            className="rounded-full"
-            onClick={() => void answer({ approved: true })}
-          >
-            Approve and run
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="rounded-full"
-            onClick={() =>
-              void answer({ approved: false, reason: "Denied by operator" })
-            }
-          >
-            Deny
-          </Button>
-        </div>
-        {error && (
-          <p role="alert" className="text-xs text-red-400">
-            {error}
-          </p>
-        )}
-      </div>
-    )
-  }
-
-  if (approval?.approved === false) {
-    return (
-      <div className="flex items-center gap-2 rounded-2xl border border-red-400/25 bg-red-400/[0.06] px-4 py-3">
-        <CircleSlashIcon className="size-4 text-red-400" />
-        <span className="text-sm text-red-300">
-          Invocation denied
-          {approval.reason ? ` — ${approval.reason}` : ""}
-        </span>
-      </div>
-    )
-  }
-
+  // Running: a risky invocation shows "waiting for operator" while the tool
+  // polls the intervention; a safe one shows the replay in flight.
   if (result === undefined) {
     return (
-      <div className="flex items-center gap-2.5 rounded-2xl border border-white/8 bg-card/60 px-4 py-3">
-        <Loader2Icon className="size-4 animate-spin text-emerald-300" />
-        <span className="text-sm text-muted-foreground">
-          Replaying{" "}
-          <span className="font-mono text-foreground">
-            {args?.capabilityId ?? "…"}
-          </span>{" "}
-          deterministically — no model in the loop…
-        </span>
-      </div>
+      <WaitingForOperator capabilityId={args?.capabilityId} inputs={inputs} />
     )
   }
 
-  if (result.status === "error") {
+  // ── Live engine outcomes ──
+  if (result.source === "live") {
+    const live = result.live
+    if (live.kind === "success") {
+      return (
+        <div className="flex flex-col gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.05] p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <CheckCircle2Icon className="size-4 text-emerald-300" />
+            <span className="text-sm font-semibold text-emerald-200">
+              {args?.capabilityId ?? "Capability"}
+            </span>
+            <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-1.5 py-px font-mono text-xs text-emerald-300">
+              engine
+            </span>
+          </div>
+          <OutputsTable outputs={live.outputs} />
+          <div className="flex items-center gap-3 text-[11px] text-muted-foreground/80">
+            <span>{live.stepsExecuted} steps replayed</span>
+            <span>{(live.durationMs / 1000).toFixed(1)}s</span>
+            <span>checkpoint verified</span>
+          </div>
+        </div>
+      )
+    }
+    if (live.kind === "business_outcome") {
+      return (
+        <div className="flex flex-col gap-2.5 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangleIcon className="size-4 text-amber-300" />
+            <span className="text-sm font-semibold text-amber-200">
+              Business outcome:{" "}
+              <span className="font-mono">{live.outcome}</span>
+            </span>
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {live.detail}
+          </p>
+          <div className="flex items-center gap-3 border-t border-amber-400/15 pt-2 text-[11px] text-muted-foreground/80">
+            <span>{live.stepsExecuted} steps</span>
+            <span>{(live.durationMs / 1000).toFixed(1)}s replay</span>
+          </div>
+        </div>
+      )
+    }
+    if (live.kind === "denied") {
+      return (
+        <div className="flex items-center gap-2 rounded-2xl border border-red-400/25 bg-red-400/[0.06] px-4 py-3">
+          <CircleSlashIcon className="size-4 text-red-400" />
+          <span className="text-sm text-red-300">
+            Invocation rejected by {live.decidedBy ?? "an operator"}
+            {live.decisionReason ? ` — ${live.decisionReason}` : ""}
+          </span>
+        </div>
+      )
+    }
+    if (live.kind === "engine_offline") {
+      return (
+        <div className="flex items-start gap-2.5 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4">
+          <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-amber-300" />
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-semibold text-amber-200">
+              Engine offline
+            </span>
+            <span className="text-xs leading-relaxed text-muted-foreground">
+              This capability is risky and needs operator approval, so it cannot
+              run from the stub catalog. Start the engine with{" "}
+              <code className="font-mono text-emerald-300">
+                pnpm --filter engine dev
+              </code>{" "}
+              and try again.
+            </span>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="flex items-start gap-2.5 rounded-2xl border border-red-400/25 bg-red-400/[0.06] p-4">
         <XCircleIcon className="mt-0.5 size-4 shrink-0 text-red-400" />
@@ -270,29 +348,47 @@ const InvokeCapabilityUI = ({
             Hard failure
           </span>
           <span className="text-xs leading-relaxed text-red-200/80">
-            {result.message}
+            {live.kind === "hard_failure"
+              ? `${live.expected} — observed: ${live.observed}`
+              : live.message}
           </span>
         </div>
       </div>
     )
   }
 
-  if (result.status === "business_outcome") {
+  // ── Stub fallback (safe capabilities only, engine offline) ──
+  const stub = result.stub
+  if (stub.status === "error") {
+    return (
+      <div className="flex items-start gap-2.5 rounded-2xl border border-red-400/25 bg-red-400/[0.06] p-4">
+        <XCircleIcon className="mt-0.5 size-4 shrink-0 text-red-400" />
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-semibold text-red-300">
+            Hard failure
+          </span>
+          <span className="text-xs leading-relaxed text-red-200/80">
+            {stub.message}
+          </span>
+        </div>
+      </div>
+    )
+  }
+  if (stub.status === "business_outcome") {
     return (
       <div className="flex flex-col gap-2.5 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4">
         <div className="flex items-center gap-2">
           <AlertTriangleIcon className="size-4 text-amber-300" />
           <span className="text-sm font-semibold text-amber-200">
-            Business outcome:{" "}
-            <span className="font-mono">{result.outcome}</span>
+            Business outcome: <span className="font-mono">{stub.outcome}</span>
           </span>
         </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          {result.detail}
+          {stub.detail}
         </p>
         <div className="flex items-center gap-3 border-t border-amber-400/15 pt-2 text-[11px] text-muted-foreground/80">
-          <span>{result.stepsExecuted} steps</span>
-          <span>{(result.durationMs / 1000).toFixed(1)}s replay</span>
+          <span>{stub.stepsExecuted} steps</span>
+          <span>{(stub.durationMs / 1000).toFixed(1)}s replay</span>
           <span className="rounded-full border border-white/10 px-1.5 py-px font-mono text-xs">
             stub
           </span>
@@ -300,29 +396,79 @@ const InvokeCapabilityUI = ({
       </div>
     )
   }
-
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.05] p-4">
       <div className="flex flex-wrap items-center gap-2">
         <CheckCircle2Icon className="size-4 text-emerald-300" />
         <span className="text-sm font-semibold text-emerald-200">
-          {result.capabilityName}
+          {stub.capabilityName}
         </span>
         <span className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-xs text-muted-foreground">
-          v{result.version}
+          v{stub.version}
         </span>
         <span className="rounded-full border border-white/10 px-1.5 py-px font-mono text-xs text-muted-foreground">
           stub
         </span>
       </div>
-      <OutputsTable outputs={result.outputs} />
+      <OutputsTable outputs={stub.outputs} />
       <div className="flex items-center gap-3 text-[11px] text-muted-foreground/80">
-        <span>{result.stepsExecuted} steps replayed</span>
-        <span>{(result.durationMs / 1000).toFixed(1)}s</span>
+        <span>{stub.stepsExecuted} steps replayed</span>
+        <span>{(stub.durationMs / 1000).toFixed(1)}s</span>
         <span>checkpoint verified</span>
       </div>
     </div>
   )
+}
+
+// The invoke executor: FRONTEND tool ("use client") so it calls the
+// authenticated /api/engine proxy with the signed-in user's cookies. Risky
+// capabilities raise an approval intervention (a different operator decides
+// in /admin/interventions); safe capabilities replay straight through.
+const runInvoke = async ({
+  capabilityId,
+  inputs,
+}: {
+  capabilityId: string
+  inputs: Record<string, unknown>
+}): Promise<InvokeResult> => {
+  const { listLiveCapabilities, invokeLiveCapability } =
+    await import("@/lib/engine/invoke")
+  // Look up the capability's risk class from the live catalog.
+  let risky: boolean | undefined
+  try {
+    const caps = await listLiveCapabilities()
+    risky = caps.find((cap) => cap.id === capabilityId)?.risk === "risky"
+  } catch {
+    risky = undefined // engine offline — fall through to the stub
+  }
+
+  if (risky !== undefined) {
+    const live = await invokeLiveCapability({
+      capabilityId,
+      inputs: inputs as Record<string, string | number | boolean>,
+      risky,
+    })
+    // A risky capability with the engine offline must NOT silently stub —
+    // it needs the segregated approval, which only the engine enforces.
+    if (risky && live.kind === "engine_offline") {
+      return { source: "live", live }
+    }
+    return { source: "live", live }
+  }
+
+  // Engine offline AND (safe or unknown): the stub catalog keeps the demo
+  // navigable for SAFE capabilities only. Risky ones never stub.
+  const { getCapabilityRisk } = await import("@/lib/capabilities-catalog")
+  if (getCapabilityRisk(capabilityId) === "risky") {
+    return {
+      source: "live",
+      live: { kind: "engine_offline" },
+    }
+  }
+  return {
+    source: "stub",
+    stub: await invokeStubCapability(capabilityId, inputs),
+  }
 }
 
 export default defineToolkit({
@@ -330,15 +476,21 @@ export default defineToolkit({
     description:
       "List the saved automation capabilities the calling agent can invoke. A capability is a recorded, versioned UI-automation flow in a back-office application, with typed inputs, typed outputs, a verified checkpoint, and a risk class. Invoke capabilities instead of attempting the work free-form.",
     parameters: z.object({}),
-    execute: async () => {
-      const { CAPABILITIES } = await import("@/lib/capabilities-catalog")
-      return CAPABILITIES
+    execute: async (): Promise<ListResult> => {
+      "use client"
+      try {
+        const { listLiveCapabilities } = await import("@/lib/engine/invoke")
+        return { source: "live", capabilities: await listLiveCapabilities() }
+      } catch {
+        const { CAPABILITIES } = await import("@/lib/capabilities-catalog")
+        return { source: "stub", capabilities: CAPABILITIES }
+      }
     },
     render: CapabilityListUI,
   },
   invoke_capability: {
     description:
-      "Invoke a saved capability by id with its typed inputs. The automation engine replays the recorded UI flow deterministically — no model decisions — and returns a structured result: success with outputs, a known business outcome (for example member_not_found, a legitimate answer), or a hard failure. Risky capabilities require human approval before they run. Ask the user for any missing required inputs before invoking.",
+      "Invoke a saved capability by id with its typed inputs. The automation engine replays the recorded UI flow deterministically — no model decisions — and returns a structured result: success with outputs, a known business outcome (for example member_not_found, a legitimate answer), or a hard failure. Risky capabilities raise an operator approval first; the run waits for a different operator to decide and only then executes. Ask the user for any missing required inputs before invoking.",
     parameters: z.object({
       capabilityId: z
         .string()
@@ -351,10 +503,11 @@ export default defineToolkit({
           "Input values keyed by the capability's input names, matching its declared types."
         ),
     }),
-    execute: async ({ capabilityId, inputs }) =>
-      invokeStubCapability(capabilityId, inputs),
-    // Approval gates and consequential results must never collapse into the
-    // tool group.
+    execute: runInvoke as unknown as (args: {
+      capabilityId: string
+      inputs: Record<string, unknown>
+    }) => Promise<InvokeResult>,
+    // Approval and consequential results must never collapse into the tool group.
     display: "standalone",
     render: InvokeCapabilityUI,
   },
