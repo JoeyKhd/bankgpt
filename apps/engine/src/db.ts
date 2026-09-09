@@ -8,6 +8,7 @@
  * artifact schema (artifact.ts) the single source of truth for shape.
  */
 import Database from "better-sqlite3"
+import { createHash } from "node:crypto"
 import { mkdirSync } from "node:fs"
 import { dirname } from "node:path"
 
@@ -175,6 +176,23 @@ export const insertCapability = (
        name = excluded.name, risk = excluded.risk,
        reviewed = excluded.reviewed, artifact = excluded.artifact`
   ).run(row)
+  // Review state is authoritative in the DB COLUMN (the review endpoint
+  // writes it; the embedded artifact JSON is a snapshot that is never
+  // re-parsed on the replay path). A re-saved artifact that claims
+  // `reviewed: false` must not silently strip the human review a previous
+  // version earned: keep the column true if any stored version is reviewed.
+  if (row.reviewed === 0) {
+    const anyReviewed = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM capabilities WHERE id = @id AND reviewed = 1`
+      )
+      .get({ id: row.id }) as { n: number }
+    if (anyReviewed.n > 0) {
+      db.prepare(
+        `UPDATE capabilities SET reviewed = 1 WHERE id = @id AND version = @version`
+      ).run({ id: row.id, version: row.version })
+    }
+  }
 }
 
 export const getCapability = (
@@ -186,6 +204,24 @@ export const getCapability = (
       `SELECT * FROM capabilities WHERE id = @id ORDER BY createdAt DESC LIMIT 1`
     )
     .get({ id }) as CapabilityRow | undefined
+
+/** Fetch one exact stored version of a capability. */
+export const getCapabilityVersion = (
+  db: Database.Database,
+  id: string,
+  version: string
+): CapabilityRow | undefined =>
+  db
+    .prepare(`SELECT * FROM capabilities WHERE id = @id AND version = @version`)
+    .get({ id, version }) as CapabilityRow | undefined
+
+/**
+ * Stable content hash of a stored artifact row. Approvals pin this at
+ * request time so the run that executes is provably the artifact the
+ * operator reviewed, not whatever version is latest at approval time.
+ */
+export const hashCapabilityRow = (row: CapabilityRow): string =>
+  createHash("sha256").update(row.artifact).digest("hex")
 
 export const listCapabilities = (db: Database.Database): CapabilityRow[] =>
   db
@@ -336,13 +372,20 @@ export const findInterventionByToken = (
     .prepare(`SELECT * FROM interventions WHERE approvalToken = @token`)
     .get({ token }) as InterventionRow | undefined
 
-/** Record the run that consumed a (single-use) approval token. */
+/**
+ * Record the run that consumed a (single-use) approval token. The UPDATE
+ * is conditional — it only lands while the token is still unconsumed — so
+ * two runs racing the same token cannot both be marked as its consumer:
+ * exactly one `changes` count is 1. Returns true for the run that won.
+ */
 export const consumeApprovalToken = (
   db: Database.Database,
   id: string,
   runId: string
-): void => {
-  db.prepare(
-    `UPDATE interventions SET consumedByRunId = @runId WHERE id = @id`
-  ).run({ id, runId })
-}
+): boolean =>
+  db
+    .prepare(
+      `UPDATE interventions SET consumedByRunId = @runId
+       WHERE id = @id AND consumedByRunId IS NULL`
+    )
+    .run({ id, runId }).changes === 1

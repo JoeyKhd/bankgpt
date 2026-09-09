@@ -5,8 +5,9 @@
  * executes the recorded steps WITHOUT any model calls:
  *
  * - targets resolve by primary a11y locator (role + accessible name), then
- *   fall back through the recorded CSS path and visible text, with explicit
- *   waits — never pixel coordinates;
+ *   fall back through the recorded candidates IN RECORDED ORDER (never a
+ *   DOM-ordered locator union), with explicit waits — never pixel
+ *   coordinates;
  * - `{{input}}` placeholders substitute validated, typed input parameters;
  * - `extract` steps fill the declared outputs;
  * - after each step, the business-outcome detect rules are checked, and at
@@ -18,8 +19,10 @@ import type { Browser, Page, Locator } from "playwright"
 import {
   CapabilityArtifactSchema,
   type CapabilityArtifact,
+  type CapabilityOutput,
   type CapabilityStep,
   type Target,
+  type Locator as RecordedLocator,
   type Checkpoint,
 } from "@/artifact"
 import type { RunResult } from "@/results"
@@ -138,39 +141,149 @@ export const validateInputs = (
   return clean
 }
 
+/**
+ * Coerce one extracted value into its declared output type. Extract steps
+ * read strings off the page (element text, input values, regex captures);
+ * the DECLARED output contract decides the caller-facing type. A value
+ * that cannot honestly convert (e.g. "n/a" into a number) throws — the
+ * step fails and becomes the structured result, instead of silently
+ * returning a mistyped output to the calling agent.
+ */
+const coerceOutputValue = (
+  spec: CapabilityOutput,
+  value: string | number | boolean
+): string | number | boolean => {
+  switch (spec.type) {
+    case "string":
+      return typeof value === "string" ? value : String(value)
+    case "number": {
+      const n = typeof value === "number" ? value : Number(value)
+      if (typeof value !== "number" && Number.isNaN(n)) {
+        throw new Error(
+          `output "${spec.name}" is declared number but extracted ${JSON.stringify(value)}`
+        )
+      }
+      return n
+    }
+    case "boolean": {
+      if (typeof value === "boolean") return value
+      const v = String(value).trim().toLowerCase()
+      if (v === "true" || v === "yes" || v === "1") return true
+      if (v === "false" || v === "no" || v === "0") return false
+      throw new Error(
+        `output "${spec.name}" is declared boolean but extracted ${JSON.stringify(value)}`
+      )
+    }
+    case "date": {
+      // Dates cross the wire as ISO strings; reject values that do not
+      // parse so the caller never receives a garbage "date".
+      const s = String(value)
+      if (Number.isNaN(Date.parse(s))) {
+        throw new Error(
+          `output "${spec.name}" is declared date but extracted ${JSON.stringify(value)}`
+        )
+      }
+      return s
+    }
+  }
+}
+
+/**
+ * Validate the extracted outputs against the declared output contract
+ * before reporting success: every declared output must be present and
+ * type-coerced, and nothing undeclared may leak into the result.
+ */
+const validateOutputs = (
+  artifact: CapabilityArtifact,
+  raw: Record<string, string | number | boolean>
+): Record<string, string | number | boolean> => {
+  const declared = new Map(artifact.outputs.map((o) => [o.name, o]))
+  for (const name of Object.keys(raw)) {
+    if (!declared.has(name)) {
+      throw new Error(
+        `replay produced undeclared output "${name}" (not in the artifact's output contract)`
+      )
+    }
+  }
+  const clean: Record<string, string | number | boolean> = {}
+  for (const spec of artifact.outputs) {
+    const value = raw[spec.name]
+    if (value === undefined) {
+      throw new Error(
+        `replay finished without producing declared output "${spec.name}" (no extract step filled it)`
+      )
+    }
+    clean[spec.name] = coerceOutputValue(spec, value)
+  }
+  return clean
+}
+
 /** Build a Playwright locator for one recorded locator candidate. */
-const toLocator = (page: Page, candidate: Target["primary"]): Locator => {
+const toLocator = (page: Page, candidate: RecordedLocator): Locator => {
   switch (candidate.strategy) {
     case "a11y":
       return page.getByRole(candidate.role as never, {
-        name: candidate.name ?? "",
+        name: candidate.name,
         exact: candidate.exact,
       })
     case "css":
-      return page.locator(candidate.css ?? "")
+      return page.locator(candidate.css)
     case "text":
-      return page.getByText(candidate.text ?? "", { exact: false })
+      return page.getByText(candidate.text, { exact: false })
   }
 }
 
 /** Short human-readable description of a locator, for logs and errors. */
-const describeLocator = (candidate: Target["primary"]): string => {
+const describeLocator = (candidate: RecordedLocator): string => {
   switch (candidate.strategy) {
     case "a11y":
-      return `${candidate.role}[name=${JSON.stringify(candidate.name ?? "")}]`
+      return `${candidate.role}[name=${JSON.stringify(candidate.name)}]`
     case "css":
-      return `css(${candidate.css ?? ""})`
+      return `css(${candidate.css})`
     case "text":
-      return `text(${JSON.stringify(candidate.text ?? "")})`
+      return `text(${JSON.stringify(candidate.text)})`
   }
 }
 
-/** Resolve a recorded target to a live locator: primary first, then fallbacks. */
-const resolveTarget = (page: Page, target: Target): Locator => {
+/** Per-candidate probe timeout for the ordered fallback chain. */
+const FALLBACK_PROBE_MS = 2_000
+
+/**
+ * Run `act` against the FIRST locator candidate that currently matches:
+ * the primary first, then the recorded fallbacks IN RECORDED ORDER.
+ *
+ * This is deliberately NOT Playwright's `locator.or(...).first()` union:
+ * the OR locator merges matches in DOCUMENT order, so a visible fallback
+ * element sitting higher in the DOM would silently win over the primary
+ * a11y identity — the exact drift the fallback order is supposed to
+ * absorb. Here a candidate is used only when it resolves to at least one
+ * attached element within a short probe window; otherwise the next
+ * recorded candidate is tried. `act` still gets Playwright's own
+ * actionability waits and auto-retry against the chosen candidate.
+ */
+const withResolvedTarget = async <T>(
+  page: Page,
+  target: Target,
+  act: (locator: Locator) => Promise<T>
+): Promise<T> => {
   const candidates = [target.primary, ...target.fallbacks]
-  // first() on the OR chain: Playwright resolves the first candidate that
-  // matches, in recorded order, when the locator is awaited.
-  return candidates.map((c) => toLocator(page, c)).reduce((acc, l) => acc.or(l))
+  for (const candidate of candidates) {
+    const locator = toLocator(page, candidate).first()
+    try {
+      await locator.waitFor({ state: "attached", timeout: FALLBACK_PROBE_MS })
+      return await act(locator)
+    } catch (err) {
+      // The action itself (click/fill/extract) failing on a RESOLVED
+      // element is not a locator miss: the element was there and the
+      // action failed for real — report it instead of masking it behind
+      // the remaining fallbacks.
+      const matched = (await locator.count().catch(() => 0)) > 0
+      if (matched) throw err
+    }
+  }
+  throw new Error(
+    `target not found; tried in order: ${candidates.map(describeLocator).join(" → ")}`
+  )
 }
 
 /** Assert one checkpoint condition set against the live page. */
@@ -204,9 +317,9 @@ const checkCheckpoint = async (
   }
   if (checkpoint.elementPresent) {
     try {
-      await resolveTarget(page, checkpoint.elementPresent)
-        .first()
-        .waitFor({ state: "attached", timeout })
+      await withResolvedTarget(page, checkpoint.elementPresent, (l) =>
+        l.waitFor({ state: "attached", timeout })
+      )
     } catch {
       return {
         ok: false,
@@ -258,34 +371,34 @@ const executeStep = async (
     }
     case "click": {
       if (!step.target) throw new Error("click step needs a target")
-      await resolveTarget(page, step.target).first().click()
+      await withResolvedTarget(page, step.target, (l) => l.click())
       return `clicked ${describeLocator(step.target.primary)}`
     }
     case "type": {
       if (!step.target) throw new Error("type step needs a target")
       const value = step.value ? substitute(step.value, inputs) : ""
-      const locator = resolveTarget(page, step.target).first()
       // A consumed input's value is already echoed in the re-rendered field;
       // filling again would retype the same value. Skip the fill.
       if (step.input && consumedInputs.has(step.input)) {
         return `skipped retype of consumed input "${step.input}" in ${describeLocator(step.target.primary)}`
       }
-      await locator.fill(value)
+      await withResolvedTarget(page, step.target, (l) => l.fill(value))
       if (step.input) consumedInputs.add(step.input)
       return `typed into ${describeLocator(step.target.primary)}`
     }
     case "select": {
       if (!step.target) throw new Error("select step needs a target")
       const value = step.value ? substitute(step.value, inputs) : ""
-      await resolveTarget(page, step.target)
-        .first()
-        .selectOption({ label: value })
+      await withResolvedTarget(page, step.target, (l) =>
+        l.selectOption({ label: value })
+      )
       return `selected "${value}" in ${describeLocator(step.target.primary)}`
     }
     case "press": {
       if (!step.key) throw new Error("press step needs a key")
       if (step.target) {
-        await resolveTarget(page, step.target).first().press(step.key)
+        const key = step.key
+        await withResolvedTarget(page, step.target, (l) => l.press(key))
       } else {
         await page.keyboard.press(step.key)
       }
@@ -311,12 +424,14 @@ const executeExtract = async (
   switch (step.extractKind ?? "text") {
     case "text": {
       if (!step.target) throw new Error("extract(text) needs a target")
-      const text = await resolveTarget(page, step.target).first().innerText()
+      const text = await withResolvedTarget(page, step.target, (l) =>
+        l.innerText()
+      )
       return text.trim()
     }
     case "value": {
       if (!step.target) throw new Error("extract(value) needs a target")
-      return await resolveTarget(page, step.target).first().inputValue()
+      return await withResolvedTarget(page, step.target, (l) => l.inputValue())
     }
     case "page-text-match": {
       if (!step.pattern)
@@ -387,13 +502,14 @@ export const replayCapability = async (
 
   // Policy: risky capabilities need approval (and, per policy, review).
   requireApproval(policy, { risk: artifact.risk, approved: options.approved })
-  // An UNREVIEWED risky capability is not operator-trusted yet: without an
-  // explicit approval token, refuse to execute its mutations.
+  // Review is an INDEPENDENT gate, not an approval substitute: an
+  // unreviewed risky artifact never executes, token or not — approval
+  // authorizes one run of a REVIEWED artifact, it cannot stand in for the
+  // human review pass itself.
   if (
     policy.requireReviewForRisky &&
     artifact.risk === "risky" &&
-    !artifact.reviewed &&
-    !options.approved
+    !artifact.reviewed
   ) {
     throw new ApprovalRequiredError(
       `risky capability "${artifact.id}" is not reviewed (reviewed: false)`
@@ -412,12 +528,14 @@ export const replayCapability = async (
   // Track the last main-document response status so transient 5xx pages
   // (the target's "Core system unavailable — try again") are detectable.
   let lastMainStatus: number | undefined
+  let lastMainMethod: string | undefined
   page.on("response", (response) => {
     if (
       response.request().isNavigationRequest() &&
       response.frame() === page.mainFrame()
     ) {
       lastMainStatus = response.status()
+      lastMainMethod = response.request().method()
     }
   })
   const outputs: Record<string, string | number | boolean> = {}
@@ -487,7 +605,15 @@ export const replayCapability = async (
       for (let attempt = 1; attempt <= MAX_STEP_ATTEMPTS; attempt++) {
         // Live-session control gate: automation acts only while it owns the
         // session and is not paused (pause/cede arrive over the WS channel).
-        if (options.session) await waitWhileNotAutomation(options.session)
+        if (options.session) {
+          const epochBefore = options.session.epoch
+          await waitWhileNotAutomation(options.session)
+          // Ownership may have changed while we waited — if so, abort this
+          // action attempt and re-evaluate from the new owner.
+          if (options.session.epoch !== epochBefore) {
+            throw new Error("ownership changed during wait — aborting action")
+          }
+        }
         try {
           // Transient-5xx recovery: if the LAST action landed on the app's
           // transient error page ("Core system unavailable — try again"),
@@ -512,7 +638,13 @@ export const replayCapability = async (
               result: "ok",
             })
             await page.waitForTimeout(400 * (reloads + 1))
-            await page.reload({ waitUntil: "domcontentloaded" })
+            if (lastMainMethod === "GET") {
+              await page.reload({ waitUntil: "domcontentloaded" })
+            } else {
+              // A POST that returned 5xx may have committed server-side;
+              // reloading would repeat the mutation. Escalate instead.
+              throw new TransientServerError(lastMainStatus)
+            }
           }
 
           // The page may have moved; re-assert scope before acting.
@@ -521,8 +653,21 @@ export const replayCapability = async (
           }
           if (step.action === "extract") {
             const value = await executeExtract(page, step)
-            if (step.outputName) outputs[step.outputName] = value
-            detail = `extracted ${step.outputName}=${JSON.stringify(value)}`
+            if (step.outputName) {
+              const spec = artifact.outputs.find(
+                (o) => o.name === step.outputName
+              )
+              if (!spec) {
+                throw new Error(
+                  `extract step fills undeclared output "${step.outputName}"`
+                )
+              }
+              const coerced = coerceOutputValue(spec, value)
+              outputs[step.outputName] = coerced
+              detail = `extracted ${step.outputName}=${JSON.stringify(coerced)}`
+            } else {
+              detail = "extract (no outputName)"
+            }
           } else {
             detail = await executeStep(page, step, inputs, consumedInputs)
           }
@@ -681,7 +826,7 @@ export const replayCapability = async (
     return {
       status: "success",
       capabilityId,
-      outputs,
+      outputs: validateOutputs(artifact, outputs),
       stepsExecuted,
       durationMs: durationMs(),
     }

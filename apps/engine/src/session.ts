@@ -22,6 +22,8 @@ import type { Browser, BrowserContext, Page } from "playwright"
 
 export type ControlOwner = "automation" | "human"
 
+let ownershipEpoch = 0
+
 export type LiveSession = {
   id: string
   runId: string
@@ -29,6 +31,8 @@ export type LiveSession = {
   page: Page
   owner: ControlOwner
   paused: boolean
+  /** Incremented on every ownership change; automation must abort if it changes mid-action. */
+  epoch: number
   /** Append-only record of who did what, for evidence. */
   controlLog: Array<{ at: string; event: string; detail?: string }>
   emitter: EventEmitter
@@ -51,6 +55,7 @@ export const createLiveSession = async (
     page,
     owner: "automation",
     paused: false,
+    epoch: ownershipEpoch,
     controlLog: [{ at: new Date().toISOString(), event: "session-opened" }],
     emitter,
     signal: () => emitter.emit("change"),
@@ -113,11 +118,14 @@ export const listSessions = (): Array<{
   runId: string
   owner: ControlOwner
   paused: boolean
+  /** Incremented on every ownership change; automation must abort if it changes mid-action. */
+  epoch: number
 }> =>
   [...sessions.values()].map((s) => ({
     runId: s.runId,
     owner: s.owner,
     paused: s.paused,
+    epoch: s.epoch,
   }))
 
 export const pauseSession = (runId: string): boolean => {
@@ -133,6 +141,7 @@ export const cedeSession = (runId: string, operator: string): boolean => {
   const s = sessions.get(runId)
   if (!s || s.owner === "human") return false
   s.owner = "human"
+  s.epoch = ++ownershipEpoch
   s.controlLog.push({
     at: new Date().toISOString(),
     event: "ceded",
@@ -147,6 +156,7 @@ export const resumeSession = (runId: string, operator?: string): boolean => {
   if (!s) return false
   const wasHuman = s.owner === "human"
   s.owner = "automation"
+  s.epoch = ++ownershipEpoch
   s.paused = false
   s.controlLog.push({
     at: new Date().toISOString(),

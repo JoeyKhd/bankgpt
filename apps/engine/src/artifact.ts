@@ -65,24 +65,43 @@ export type CapabilityOutput = z.infer<typeof CapabilityOutputSchema>
  * `a11y` (role + accessible name) is the preferred strategy — it survives
  * CSS restyling, theming, and markup churn, which is exactly the drift we
  * expect across tenants that share a vendor product.
+ *
+ * The schema is a STRICT discriminated union on `strategy`: each variant
+ * requires its own nonempty fields and rejects every other key. The earlier
+ * all-optional object accepted structurally useless locators (an a11y
+ * locator without a name resolved to "first element with this role
+ * anywhere") and silently carried legacy mistakes like
+ * `{strategy: "text", value: "…"}` (a probe artifact once shipped exactly
+ * that — the `value` key is not a locator field and never matched).
  */
-export const LocatorSchema = z.object({
-  strategy: z.enum(["a11y", "css", "text"]),
-  role: z.string().optional().describe("ARIA role, for strategy a11y"),
-  name: z
-    .string()
-    .optional()
-    .describe("Accessible name as observed by the discovery run, for a11y"),
-  exact: z
-    .boolean()
-    .default(true)
-    .describe("Match the accessible name exactly (case-sensitive)"),
-  css: z.string().optional().describe("CSS selector, for strategy css"),
-  text: z
-    .string()
-    .optional()
-    .describe("Visible text to match, for strategy text"),
-})
+export const LocatorSchema = z.discriminatedUnion("strategy", [
+  z
+    .object({
+      strategy: z.literal("a11y"),
+      role: z.string().min(1).describe("ARIA role"),
+      name: z
+        .string()
+        .min(1)
+        .describe("Accessible name as observed by the discovery run"),
+      exact: z
+        .boolean()
+        .default(true)
+        .describe("Match the accessible name exactly (case-sensitive)"),
+    })
+    .strict(),
+  z
+    .object({
+      strategy: z.literal("css"),
+      css: z.string().min(1).describe("CSS selector"),
+    })
+    .strict(),
+  z
+    .object({
+      strategy: z.literal("text"),
+      text: z.string().min(1).describe("Visible text to match"),
+    })
+    .strict(),
+])
 export type Locator = z.infer<typeof LocatorSchema>
 
 /**
@@ -132,35 +151,151 @@ export type StepAction = z.infer<typeof StepActionSchema>
  *   "page-text-match" (first regex capture from the visible page text,
  *   e.g. a confirmation number).
  */
-export const CapabilityStepSchema = z.object({
-  /** Short imperative summary for reviewers, e.g. "Type the member ID". */
-  intent: z.string(),
-  action: StepActionSchema,
-  target: TargetSchema.optional(),
-  /** Which typed input feeds this step (for `type` / `select` / navigate URL). */
-  input: z.string().optional(),
-  /** Literal value or `{{inputName}}` placeholder. */
-  value: z.string().optional(),
-  /** Destination URL for `navigate`; supports `{{inputName}}` placeholders. */
-  url: z.string().optional(),
-  /** Key name for `press`, e.g. "Enter". */
-  key: z.string().optional(),
-  /** For `extract`: which declared output this step fills. */
-  outputName: z.string().optional(),
-  extractKind: z.enum(["text", "value", "page-text-match"]).optional(),
-  /** Regex with one capture group, for `page-text-match` extraction. */
-  pattern: z.string().optional(),
-  /** Optional per-step assertion checked right after the action. */
-  checkpoint: z.lazy(() => CheckpointSchema).optional(),
-  /**
-   * Business-outcome codes that must NOT fire right after this step. Use when
-   * an outcome's detect text also matches an intermediate page (e.g. a
-   * validation error re-renders the same form): the step's own checkpoint
-   * fails first and the step retry loop re-drives, while the outcome still
-   * fires on later steps.
-   */
-  suppressOutcomes: z.array(z.string()).optional(),
-})
+/** Per-action required/allowed fields, enforced by the superRefine below. */
+const STEP_FIELD_RULES: Record<
+  StepAction,
+  { required: string[]; allowed: string[] }
+> = {
+  navigate: {
+    required: ["url"],
+    allowed: ["intent", "action", "url", "checkpoint"],
+  },
+  click: {
+    required: ["target"],
+    allowed: ["intent", "action", "target", "checkpoint", "suppressOutcomes"],
+  },
+  type: {
+    required: ["target"],
+    allowed: [
+      "intent",
+      "action",
+      "target",
+      "input",
+      "value",
+      "checkpoint",
+      "suppressOutcomes",
+    ],
+  },
+  select: {
+    required: ["target"],
+    allowed: [
+      "intent",
+      "action",
+      "target",
+      "input",
+      "value",
+      "checkpoint",
+      "suppressOutcomes",
+    ],
+  },
+  press: {
+    required: ["key"],
+    allowed: [
+      "intent",
+      "action",
+      "target",
+      "key",
+      "checkpoint",
+      "suppressOutcomes",
+    ],
+  },
+  wait: {
+    required: ["checkpoint"],
+    allowed: ["intent", "action", "checkpoint"],
+  },
+  extract: {
+    required: ["outputName", "extractKind"],
+    allowed: [
+      "intent",
+      "action",
+      "target",
+      "outputName",
+      "extractKind",
+      "pattern",
+      "checkpoint",
+      "suppressOutcomes",
+    ],
+  },
+}
+
+export const CapabilityStepSchema = z
+  .object({
+    /** Short imperative summary for reviewers, e.g. "Type the member ID". */
+    intent: z.string().min(1),
+    action: StepActionSchema,
+    target: TargetSchema.optional(),
+    /** Which typed input feeds this step (for `type` / `select` / navigate URL). */
+    input: z.string().optional(),
+    /** Literal value or `{{inputName}}` placeholder. */
+    value: z.string().optional(),
+    /** Destination URL for `navigate`; supports `{{inputName}}` placeholders. */
+    url: z.string().optional(),
+    /** Key name for `press`, e.g. "Enter". */
+    key: z.string().optional(),
+    /** For `extract`: which declared output this step fills. */
+    outputName: z.string().optional(),
+    extractKind: z.enum(["text", "value", "page-text-match"]).optional(),
+    /** Regex with one capture group, for `page-text-match` extraction. */
+    pattern: z.string().optional(),
+    /** Optional per-step assertion checked right after the action. */
+    checkpoint: z.lazy(() => CheckpointSchema).optional(),
+    /**
+     * Business-outcome codes that must NOT fire right after this step. Use when
+     * an outcome's detect text also matches an intermediate page (e.g. a
+     * validation error re-renders the same form): the step's own checkpoint
+     * fails first and the step retry loop re-drives, while the outcome still
+     * fires on later steps.
+     */
+    suppressOutcomes: z.array(z.string()).optional(),
+  })
+  .superRefine((step, ctx) => {
+    // Action-specific required fields: the replay executor throws on these
+    // at runtime; catching them at parse time keeps a malformed artifact
+    // out of the store (a navigate without url, an extract that fills no
+    // declared output, a wait with nothing to wait for).
+    const rules = STEP_FIELD_RULES[step.action]
+    for (const field of rules.required) {
+      if (step[field as keyof typeof step] === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: [field],
+          message: `${step.action} step requires "${field}"`,
+        })
+      }
+    }
+    if (step.action === "extract" && step.extractKind === "page-text-match") {
+      if (!step.pattern) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["pattern"],
+          message: "extract(page-text-match) requires a pattern",
+        })
+      } else if (!/\(/.test(step.pattern)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["pattern"],
+          message: "extract(page-text-match) pattern needs a capture group",
+        })
+      }
+    }
+    if (
+      step.suppressOutcomes !== undefined &&
+      step.action !== "click" &&
+      step.action !== "type" &&
+      step.action !== "select" &&
+      step.action !== "press"
+    ) {
+      // suppressOutcomes only makes sense on steps that can re-render the
+      // page into an outcome-detecting state; keep it off pure reads.
+      if (step.action === "extract" || step.action === "wait") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["suppressOutcomes"],
+          message: `suppressOutcomes is meaningless on a ${step.action} step`,
+        })
+      }
+    }
+  })
 export type CapabilityStep = z.infer<typeof CapabilityStepSchema>
 
 /**
@@ -205,38 +340,113 @@ export const BusinessOutcomeSchema = z.object({
 export type BusinessOutcome = z.infer<typeof BusinessOutcomeSchema>
 
 /** The full capability artifact. */
-export const CapabilityArtifactSchema = z.object({
-  /** Stable machine id, e.g. "lookup_member_balance". */
-  id: z.string().regex(/^[a-z][a-z0-9_]*$/),
-  version: ArtifactVersionSchema,
-  /** Human-readable capability name. */
-  name: z.string(),
-  /** One-paragraph description for reviewers and calling agents. */
-  description: z.string(),
-  /** The original natural-language goal discovery was given. */
-  goal: z.string(),
-  /** Proxy application the flow was discovered against, e.g. "FinCore Teller (proxy)". */
-  targetApp: z.string(),
-  risk: RiskClassSchema,
-  /** ISO 8601 creation time of the discovery run. */
-  createdAt: z.string(),
-  /** Exact model id that performed discovery (auditability). */
-  discoveryModel: z.string(),
-  /** Id of the discovery run this artifact was distilled from. */
-  discoveryRunId: z.string(),
-  inputs: z.array(CapabilityInputSchema),
-  outputs: z.array(CapabilityOutputSchema),
-  steps: z.array(CapabilityStepSchema).min(1),
-  /** Success condition asserted at the end of replay. */
-  checkpoint: CheckpointSchema,
-  /** Expected business outcomes with their detection rules. */
-  businessOutcomes: z.array(BusinessOutcomeSchema).default([]),
-  /**
-   * Review state. Discovery sets `reviewed: false`; replay policy may
-   * require review before risky capabilities execute without an approval.
-   */
-  reviewed: z.boolean().default(false),
-})
+export const CapabilityArtifactSchema = z
+  .object({
+    /** Stable machine id, e.g. "lookup_member_balance". */
+    id: z.string().regex(/^[a-z][a-z0-9_]*$/),
+    version: ArtifactVersionSchema,
+    /** Human-readable capability name. */
+    name: z.string(),
+    /** One-paragraph description for reviewers and calling agents. */
+    description: z.string(),
+    /** The original natural-language goal discovery was given. */
+    goal: z.string(),
+    /** Proxy application the flow was discovered against, e.g. "FinCore Teller (proxy)". */
+    targetApp: z.string(),
+    risk: RiskClassSchema,
+    /** ISO 8601 creation time of the discovery run. */
+    createdAt: z.string(),
+    /** Exact model id that performed discovery (auditability). */
+    discoveryModel: z.string(),
+    /** Id of the discovery run this artifact was distilled from. */
+    discoveryRunId: z.string(),
+    inputs: z.array(CapabilityInputSchema),
+    outputs: z.array(CapabilityOutputSchema),
+    steps: z.array(CapabilityStepSchema).min(1),
+    /** Success condition asserted at the end of replay. */
+    checkpoint: CheckpointSchema,
+    /** Expected business outcomes with their detection rules. */
+    businessOutcomes: z.array(BusinessOutcomeSchema).default([]),
+    /**
+     * Review state. Discovery sets `reviewed: false`; replay policy may
+     * require review before risky capabilities execute without an approval.
+     */
+    reviewed: z.boolean().default(false),
+  })
+  .superRefine((artifact, ctx) => {
+    // Cross-field contract checks: uniqueness of declared names and that
+    // every step reference points at a DECLARED input/output. Without this
+    // a typo like outputName "savingsBalanc" parsed fine and only surfaced
+    // as a missing output after a full replay.
+    const seenInputs = new Set<string>()
+    artifact.inputs.forEach((input, i) => {
+      if (seenInputs.has(input.name)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["inputs", i, "name"],
+          message: `duplicate input name "${input.name}"`,
+        })
+      }
+      seenInputs.add(input.name)
+      if (
+        input.type === "enum" &&
+        (!input.values || input.values.length === 0)
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["inputs", i, "values"],
+          message: `enum input "${input.name}" must declare allowed values`,
+        })
+      }
+    })
+    const seenOutputs = new Set<string>()
+    artifact.outputs.forEach((output, i) => {
+      if (seenOutputs.has(output.name)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["outputs", i, "name"],
+          message: `duplicate output name "${output.name}"`,
+        })
+      }
+      seenOutputs.add(output.name)
+    })
+    const outcomeCodes = new Set<string>()
+    artifact.businessOutcomes.forEach((outcome, i) => {
+      if (outcomeCodes.has(outcome.code)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["businessOutcomes", i, "code"],
+          message: `duplicate business outcome code "${outcome.code}"`,
+        })
+      }
+      outcomeCodes.add(outcome.code)
+    })
+    artifact.steps.forEach((step, i) => {
+      if (step.input !== undefined && !seenInputs.has(step.input)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["steps", i, "input"],
+          message: `step ${i} references undeclared input "${step.input}"`,
+        })
+      }
+      if (step.outputName !== undefined && !seenOutputs.has(step.outputName)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["steps", i, "outputName"],
+          message: `step ${i} extracts undeclared output "${step.outputName}"`,
+        })
+      }
+      for (const code of step.suppressOutcomes ?? []) {
+        if (!outcomeCodes.has(code)) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["steps", i, "suppressOutcomes"],
+            message: `step ${i} suppresses undeclared business outcome "${code}"`,
+          })
+        }
+      }
+    })
+  })
 export type CapabilityArtifact = z.infer<typeof CapabilityArtifactSchema>
 
 /** Parse + validate an artifact from unknown data (e.g. JSON from disk). */

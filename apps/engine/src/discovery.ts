@@ -35,6 +35,7 @@ import type { DiscoveryResult } from "@/results"
 import {
   assertUrlAllowed,
   assertActionAllowed,
+  requireApproval,
   PolicyViolationError,
   type Policy,
 } from "@/policy"
@@ -470,6 +471,13 @@ export const runDiscovery = async (
           // session and it is not paused (pause/cede arrive over WS).
           if (options.session) await waitWhileNotAutomation(options.session)
         }
+        // Risky actions need approval before execution — the policy's
+        // safeActions set is the boundary.
+        requireApproval(policy, {
+          risk: "safe", // discovery is not a capability replay; check action risk
+          action: decision.action,
+          approved: false, // discovery never has an approval token
+        })
         outcomeNote = await act(page, decision)
       } catch (err) {
         outcomeNote = `ACTION FAILED: ${err instanceof Error ? err.message : String(err)}`

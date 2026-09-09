@@ -69,6 +69,8 @@ import { z } from "zod"
 import { CapabilityArtifactSchema } from "@/artifact"
 import {
   getCapability,
+  getCapabilityVersion,
+  hashCapabilityRow,
   insertCapability,
   listCapabilities,
   setCapabilityReviewed,
@@ -705,7 +707,7 @@ export const startEngineServer = (options: ServerOptions) => {
     const row = getCapability(db, id)
     if (!row) return json(c, 404, { error: "capability not found" })
     setCapabilityReviewed(db, id, true)
-    return json(c, 200, { id, reviewed: true })
+    return json(c, 200, { id, version: row.version, reviewed: true })
   })
 
   app.post("/discover", discoverBody, async (c) => {
@@ -857,6 +859,15 @@ export const startEngineServer = (options: ServerOptions) => {
     const artifact = CapabilityArtifactSchema.parse(JSON.parse(row.artifact))
     // Reject malformed inputs now, not after a human spent a decision.
     const inputs = validateInputs(artifact, body.inputs ?? {})
+    // Review gate lives here too: no approval request for an artifact a
+    // reviewer has not signed off (replay enforces the same gate at
+    // execution; without it here, approving would start a run that
+    // instantly fails closed).
+    if (policy.requireReviewForRisky && !artifact.reviewed) {
+      return json(c, 409, {
+        error: `risky capability "${body.capabilityId}" is not reviewed — a reviewer must mark it reviewed before it can be approved or executed`,
+      })
+    }
     const runId = randomUUID()
     await prepareRun({
       runId,
@@ -878,6 +889,10 @@ export const startEngineServer = (options: ServerOptions) => {
         `capability "${body.capabilityId}" is risky and requires operator approval`,
       context: JSON.stringify({
         capabilityId: body.capabilityId,
+        // Pin the EXACT artifact the operator is asked to approve: the
+        // run later executes this version + hash, never a mutable latest.
+        artifactVersion: row.version,
+        artifactHash: hashCapabilityRow(row),
         inputs,
         source: "request",
       }),
@@ -921,12 +936,60 @@ export const startEngineServer = (options: ServerOptions) => {
         error: `intervention kind "${row.kind}" is not decidable here`,
       })
     }
-    const token = randomUUID()
     // Segregation metadata: same-person decisions are recorded and
     // flagged, not blocked (single-account demos stay possible; the
     // evidence says who decided — see NOTES).
     const selfApproved =
       row.requestedBy !== null && row.requestedBy === body.decidedBy
+
+    // Auto-start the approved run. Request-first approvals already have
+    // their run row (awaiting_approval); engine fail-fast approvals
+    // launch a fresh run with the original inputs.
+    const context = JSON.parse(row.context) as {
+      capabilityId?: string
+      artifactVersion?: string
+      artifactHash?: string
+      inputs?: ReplayInputs
+    }
+
+    // The approval is pinned to the artifact the request carried: resolve
+    // that exact version and verify its content hash BEFORE deciding
+    // anything, so an operator never approves a run of a mutated or
+    // replaced artifact. (Approvals recorded before pinning land here
+    // without a hash and fall back to the latest version.)
+    let capabilityRow: CapabilityRow | undefined
+    if (context.capabilityId) {
+      capabilityRow = context.artifactVersion
+        ? getCapabilityVersion(
+            db,
+            context.capabilityId,
+            context.artifactVersion
+          )
+        : getCapability(db, context.capabilityId)
+      if (!capabilityRow) {
+        return json(c, 409, {
+          error: `pinned artifact ${context.capabilityId}@${context.artifactVersion ?? "latest"} is no longer stored — re-request approval`,
+        })
+      }
+      if (
+        context.artifactHash &&
+        hashCapabilityRow(capabilityRow) !== context.artifactHash
+      ) {
+        return json(c, 409, {
+          error: `pinned artifact ${context.capabilityId}@${context.artifactVersion} changed since the approval was requested — re-request approval`,
+        })
+      }
+    }
+
+    // Token consumption is atomic with the decision: the conditional
+    // UPDATE wins exactly once, so two approvals (or an approval racing a
+    // token replay) cannot both start a run off the same token.
+    if (row.approvalToken && !consumeApprovalToken(db, row.id, row.id)) {
+      return json(c, 409, {
+        error: "approval token was already consumed — the run already started",
+      })
+    }
+    const token = randomUUID()
     resolveIntervention(db, row.id, "approved", {
       decidedBy: body.decidedBy,
       decisionReason: body.reason,
@@ -934,70 +997,60 @@ export const startEngineServer = (options: ServerOptions) => {
     })
     mergeInterventionContext(db, row.id, { selfApproved })
 
-    // Auto-start the approved run. Request-first approvals already have
-    // their run row (awaiting_approval); engine fail-fast approvals
-    // launch a fresh run with the original inputs.
-    const context = JSON.parse(row.context) as {
-      capabilityId?: string
-      inputs?: ReplayInputs
-    }
     let executionRunId: string | null = null
-    if (context.capabilityId) {
-      const capabilityRow = getCapability(db, context.capabilityId)
-      if (capabilityRow) {
-        const existingRun = row.runId ? getRun(db, row.runId) : undefined
-        if (existingRun && existingRun.status === "awaiting_approval") {
-          const session = await createLiveSession(
-            await getBrowser(),
-            existingRun.id
-          )
-          const evidence = createEvidenceWriter(evidenceDir, existingRun.id)
-          activeEvidence.set(existingRun.id, evidence)
-          setRunStatus(db, existingRun.id, "running")
-          executionRunId = existingRun.id
-          launchReplayRun({
-            runId: existingRun.id,
-            capabilityRow,
-            inputs: context.inputs ?? {},
-            approved: true,
-            approvalInterventionId: row.id,
-            evidence,
-            session,
-          })
-        } else {
-          const newRunId = randomUUID()
-          const { evidence, session } = await prepareRun({
-            runId: newRunId,
-            kind: "replay",
-            capabilityId: context.capabilityId,
-            goal: null,
-            targetUrl: null,
-          })
-          if (!session) throw new Error("live session was not created")
-          executionRunId = newRunId
-          launchReplayRun({
-            runId: newRunId,
-            capabilityRow,
-            inputs: context.inputs ?? {},
-            approved: true,
-            approvalInterventionId: row.id,
-            evidence,
-            session,
-          })
-        }
-        mergeInterventionContext(db, row.id, {
-          executionRunId,
+    if (context.capabilityId && capabilityRow) {
+      const existingRun = row.runId ? getRun(db, row.runId) : undefined
+      if (existingRun && existingRun.status === "awaiting_approval") {
+        const session = await createLiveSession(
+          await getBrowser(),
+          existingRun.id
+        )
+        const evidence = createEvidenceWriter(evidenceDir, existingRun.id)
+        activeEvidence.set(existingRun.id, evidence)
+        setRunStatus(db, existingRun.id, "running")
+        executionRunId = existingRun.id
+        launchReplayRun({
+          runId: existingRun.id,
+          capabilityRow,
+          inputs: context.inputs ?? {},
+          approved: true,
+          approvalInterventionId: row.id,
+          evidence,
+          session,
         })
-        activeEvidence.get(executionRunId)?.logStep({
-          runId: executionRunId,
-          stepIndex: -1,
-          at: new Date().toISOString(),
-          action: "approval",
-          reason: `approved by ${body.decidedBy}${selfApproved ? " (self-approved — requester and decider coincide)" : ""}${body.reason ? ` — ${body.reason}` : ""}; run started`,
-          durationMs: 0,
-          result: "ok",
+      } else {
+        const newRunId = randomUUID()
+        const { evidence, session } = await prepareRun({
+          runId: newRunId,
+          kind: "replay",
+          capabilityId: context.capabilityId,
+          goal: null,
+          targetUrl: null,
+        })
+        if (!session) throw new Error("live session was not created")
+        executionRunId = newRunId
+        launchReplayRun({
+          runId: newRunId,
+          capabilityRow,
+          inputs: context.inputs ?? {},
+          approved: true,
+          approvalInterventionId: row.id,
+          evidence,
+          session,
         })
       }
+      mergeInterventionContext(db, row.id, {
+        executionRunId,
+      })
+      activeEvidence.get(executionRunId)?.logStep({
+        runId: executionRunId,
+        stepIndex: -1,
+        at: new Date().toISOString(),
+        action: "approval",
+        reason: `approved by ${body.decidedBy}${selfApproved ? " (self-approved — requester and decider coincide)" : ""}${body.reason ? ` — ${body.reason}` : ""}; run started on pinned artifact ${context.artifactVersion ?? capabilityRow.version}`,
+        durationMs: 0,
+        result: "ok",
+      })
     }
     broadcast({
       type: "intervention-resolved",
