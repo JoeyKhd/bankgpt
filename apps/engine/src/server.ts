@@ -112,6 +112,7 @@ import { createEvidenceWriter, type EvidenceWriter } from "@/evidence"
 import {
   createLiveSession,
   closeLiveSession,
+  abortSessionWait,
   pauseSession,
   cedeSession,
   resumeSession,
@@ -390,6 +391,11 @@ export const startEngineServer = (options: ServerOptions) => {
       broadcastControlState(runId, true)
       const outcome = await waitForAutomation(session, policy.handoffTimeoutMs)
       if (outcome === "resumed") return true
+      if (outcome === "aborted") {
+        // The dismiss endpoint already resolved the intervention with the
+        // operator's decision — just fail the run.
+        return false
+      }
       resolveIntervention(db, interventionId, "resolved", {
         decidedBy: "engine",
         decisionReason: `handoff timed out after ${policy.handoffTimeoutMs}ms without an operator resuming`,
@@ -1146,6 +1152,12 @@ export const startEngineServer = (options: ServerOptions) => {
       decisionReason: body.reason,
     })
     mergeInterventionContext(db, row.id, { selfApproved })
+    // A stuck run is paused inside waitForAutomation: rejecting (dismissing)
+    // its intervention must unblock the wait as "aborted" or the run — and
+    // its browser session — would hang until the handoff timeout.
+    if (row.kind === "stuck" && row.runId) {
+      abortSessionWait(row.runId, body.decidedBy)
+    }
     // A request-first run never executes: it stops where it waited.
     if (row.runId) {
       const run = getRun(db, row.runId)

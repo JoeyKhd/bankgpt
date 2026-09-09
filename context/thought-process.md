@@ -1999,3 +1999,34 @@ BLOB, createdAt`, PK `(runId, name)`) stores every evidence file as a
 - **References:** `apps/engine/seeds/*.json` (4 artifacts),
   `docker-compose.yaml` (engine-data-v2), D-067 (PUT route used to apply
   fixes), D-068 (seeder).
+
+## D-070 — 2026-09-09T19:09:17Z — Dismissable stuck interventions + take-over panel flicker fix
+
+- **Status:** accepted
+- **Decision/change:** Two operator-inbox fixes. (1) STUCK INTERVENTIONS ARE
+  NOW DISMISSABLE: the engine's reject endpoint previously accepted a stuck
+  intervention's rejection but left the paused run (and its browser session)
+  hanging until the 20-minute `handoffTimeoutMs` — it only stopped
+  `awaiting_approval` runs. Added an `aborted` flag to `LiveSession` plus
+  `abortSessionWait(runId, operator)` (session.ts), which resolves
+  `waitForAutomation` as `"aborted"` so the stuck run fails fast with the
+  dismissal recorded in the control log; the reject endpoint now calls it
+  for `kind === "stuck"`. The console's StuckCard gained a "Dismiss run"
+  button wired to the existing reject mutation. (2) FLICKER FIX: the
+  take-over panel derived `sessionGone` directly from one poll's error, so
+  the live view unmounted and the empty state mounted in a single frame
+  when a run ended (and a transient miss could false-trigger). Now
+  `sessionStateQuery` retries once before settling to error, and the panel
+  delays the closed-state swap by one poll cycle (timeout-scheduled state,
+  no setState-in-effect), so the last live frame holds until closure is
+  confirmed. Also: a pending approval's missing session now shows "Waiting
+  for a decision" instead of the misleading "Live session closed".
+- **Why:** The owner reported stuck interventions could not be dismissed
+  and that the "Live session closed" state caused a screen flicker.
+- **Consequences/follow-up:** Dismissing a stuck intervention rejects it
+  AND fails the run immediately (previously a 20-minute hang). The abort
+  path requires the new engine build — against an old engine the button
+  still rejects the intervention but the run hangs until timeout.
+- **References:** `apps/engine/src/session.ts`, `apps/engine/src/server.ts`,
+  `apps/frontend/components/admin/interventions-inbox.tsx`,
+  `apps/frontend/lib/engine/queries.ts`.

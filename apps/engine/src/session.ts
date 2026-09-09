@@ -31,6 +31,10 @@ export type LiveSession = {
   page: Page
   owner: ControlOwner
   paused: boolean
+  /** Set when an operator dismisses a stuck handoff — waitForAutomation
+   * resolves "aborted" so the run fails fast instead of waiting out the
+   * handoff timeout. */
+  aborted: boolean
   /** Incremented on every ownership change; automation must abort if it changes mid-action. */
   epoch: number
   /** Append-only record of who did what, for evidence. */
@@ -55,6 +59,7 @@ export const createLiveSession = async (
     page,
     owner: "automation",
     paused: false,
+    aborted: false,
     epoch: ownershipEpoch,
     controlLog: [{ at: new Date().toISOString(), event: "session-opened" }],
     emitter,
@@ -96,13 +101,19 @@ export const waitWhileNotAutomation = (session: LiveSession): Promise<void> =>
 export const waitForAutomation = (
   session: LiveSession,
   timeoutMs: number
-): Promise<"resumed" | "timeout"> =>
+): Promise<"resumed" | "timeout" | "aborted"> =>
   new Promise((resolve) => {
     const timer = setTimeout(() => {
       session.emitter.off("change", check)
       resolve("timeout")
     }, timeoutMs)
     const check = () => {
+      if (session.aborted) {
+        clearTimeout(timer)
+        session.emitter.off("change", check)
+        resolve("aborted")
+        return
+      }
       if (session.owner === "automation" && !session.paused) {
         clearTimeout(timer)
         session.emitter.off("change", check)
@@ -112,6 +123,24 @@ export const waitForAutomation = (
     session.emitter.on("change", check)
     check()
   })
+
+/**
+ * Unblock a run waiting on a stuck handoff because the operator dismissed
+ * the intervention: the wait resolves "aborted" and the run fails fast
+ * instead of holding the browser open until the handoff timeout.
+ */
+export const abortSessionWait = (runId: string, operator: string): boolean => {
+  const session = sessions.get(runId)
+  if (!session) return false
+  session.aborted = true
+  session.controlLog.push({
+    at: new Date().toISOString(),
+    event: "handoff-dismissed",
+    detail: operator,
+  })
+  session.signal()
+  return true
+}
 
 /** Summary of every live session, for the WS hello + debugging. */
 export const listSessions = (): Array<{
