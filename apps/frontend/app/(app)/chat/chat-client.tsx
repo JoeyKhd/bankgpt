@@ -156,10 +156,27 @@ export const ChatClient = () => {
         prompt: "Look up member 100231 and read their current balances.",
       },
       {
+        title: "Look up a member",
+        label: "Member 100774 balances",
+        prompt: "Look up member 100774 and read their current balances.",
+      },
+      {
         title: "Open a sub-account",
         label: "Needs approval",
         prompt:
           "Open a savings sub-account for member 100231 with an initial deposit of $250.",
+      },
+      {
+        title: "Freeze a debit card",
+        label: "Needs approval",
+        prompt:
+          "Freeze debit card ending 4412 for member 100231 — the card was lost.",
+      },
+      {
+        title: "Money-market account",
+        label: "Needs approval",
+        prompt:
+          "Open a money-market sub-account for member 100774 with an initial deposit of $1,000.",
       },
     ]),
   })
