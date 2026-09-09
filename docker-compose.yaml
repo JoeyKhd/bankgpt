@@ -81,7 +81,7 @@ services:
       # refused as a policy scope violation. Comma-separated regexes.
       ENGINE_ALLOWED_URL_PATTERNS: ${ENGINE_ALLOWED_URL_PATTERNS:-^https?://mockbank(:\d+)?(/|$)}
     volumes:
-      - engine-data:/data
+      - engine-data-v2:/data
     depends_on:
       mockbank:
         condition: service_started
@@ -125,4 +125,9 @@ services:
 # `docker compose down`; wiped only by `docker compose down -v`).
 volumes:
   frontend-data: # apps/frontend  -> /data/app.sqlite   (auth + app data)
-  engine-data:   # apps/engine    -> /data/engine.sqlite (capabilities, runs, evidence)
+  # Bumped to engine-data-v2 (D-068): a fresh named volume so the engine's
+  # first-boot seeder populates the canonical capabilities from seeds/
+  # instead of reusing the old hand-built volume. The old `engine-data`
+  # volume is left untouched; remove it with `docker volume rm` when you're
+  # confident the seeded volume is good.
+  engine-data-v2:   # apps/engine    -> /data/engine.sqlite (seeded on first boot, D-068)
