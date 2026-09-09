@@ -8,14 +8,14 @@ real targets are legacy third-party apps; this app exists so evidence runs are
 local, reproducible, and free of credentials, PII, and terms-of-service
 exposure.
 
-Everything is plain Node.js (`node:http`) + server-rendered HTML + one inline
-vanilla-JS confirm dialog. No framework, no build step, no dependencies
-(runtime or dev) — deliberately.
+Everything is TypeScript + Hono (`@hono/node-server`) + server-rendered HTML + one inline
+vanilla-JS confirm dialog. The target stays deliberately small and local; Hono
+keeps the route surface explicit without changing the legacy UI.
 
 ## Run
 
 ```sh
-pnpm --filter mockbank dev        # or: node src/server.js
+pnpm --filter mockbank dev        # tsx watch src/server.ts
 # listening on http://127.0.0.1:4010
 ```
 
@@ -23,7 +23,8 @@ Environment variables (all optional):
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `PORT` | `4010` | Listen port (binds `127.0.0.1` only). |
+| `PORT` | `4010` | Listen port (binds `127.0.0.1` by default). |
+| `MOCKBANK_HOST` | `127.0.0.1` | Bind host override; keep localhost for evidence runs. |
 | `SESSION_TTL_MS` | `300000` (5 min) | Inactivity timeout before sessions expire. |
 | `MOCKBANK_NO_DELAY` | unset | Set to `1` to disable the artificial latency (dev loops only; evidence runs should keep it on). |
 

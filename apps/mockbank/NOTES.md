@@ -2,11 +2,11 @@
 
 For the parent worker's ledger entry. Each bullet is a choice I made and why.
 
-- **Zero dependencies, plain `node:http`, no build step.** Matches the D-040
-  proposal and the task constraint exactly; another worker owns the lockfile,
-  so nothing was installed and `pnpm-lock.yaml` was never touched. Scripts are
-  only `dev`/`start` (no lint/format/typecheck) — deliberate demo
-  infrastructure, to be noted as a cut in REPORT.md.
+- **TypeScript + Hono conversion (owner request).** The target now uses
+  strict TypeScript ESM and Hono on `@hono/node-server`, matching the engine's
+  server style. The legacy HTML, deterministic seed, latency, transient 500,
+  session expiry, native confirm, and reset behavior are preserved. Scripts
+  now include `dev`, `start`, `build`, `lint`, `format`, and `typecheck`.
 - **No test files.** AGENTS.md bans scripted end-to-end verification unless
   the owner asks; sanity checks (`node --check`, boot + curl-style HTTP
   assertions per page/flow) were run from the agent kernel, not committed.

@@ -1,17 +1,25 @@
+import type { Account, Card, Member } from "@/store"
+
+export type AccountValues = {
+  accountType: string
+  initialDeposit: string
+  nickname: string
+}
+
 // HTML rendering for the FinCore Teller mock. Deliberately legacy: deeply
 // nested <table> layouts, generic class names ("tbl", "row", "cell"), no id
 // attributes, no data-* attributes, no ARIA roles. Interactive elements are
 // real <a>, <button>, <input>, <select>, and <label> tags so accessibility
 // tree locators still work.
 
-export const esc = (value) =>
+export const esc = (value: unknown): string =>
   String(value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
 
-export const money = (amount) =>
+export const money = (amount: number): string =>
   amount.toLocaleString("en-US", { style: "currency", currency: "USD" })
 
 const baseStyles = `
@@ -34,7 +42,11 @@ const baseStyles = `
 
 // Outer page shell: three nested levels of layout tables around the content,
 // like a real 2003-era back-office console.
-export const layout = (title, content, { signedIn = true } = {}) => `<!DOCTYPE html>
+export const layout = (
+  title: string,
+  content: string,
+  { signedIn = true }: { signedIn?: boolean } = {}
+): string => `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -93,7 +105,7 @@ export const loginPage = () =>
          </table>
        </form>
      </td></tr></table>`,
-    { signedIn: false },
+    { signedIn: false }
   )
 
 export const sessionExpiredPage = () =>
@@ -102,7 +114,7 @@ export const sessionExpiredPage = () =>
     `<h1>Session expired</h1>
      <p>Your teller session ended after 5 minutes of inactivity. Any unsaved work was discarded.</p>
      <p><a href="/login">Log in again</a></p>`,
-    { signedIn: false },
+    { signedIn: false }
   )
 
 export const dashboardPage = () =>
@@ -119,10 +131,10 @@ export const dashboardPage = () =>
            </tr>
          </table>
        </form>
-     </td></tr></table>`,
+     </td></tr></table>`
   )
 
-export const searchResultsPage = (query, matches) => {
+export const searchResultsPage = (query: string, matches: Member[]): string => {
   const rows = matches
     .map(
       (member) => `<tr class="row">
@@ -130,7 +142,7 @@ export const searchResultsPage = (query, matches) => {
         <td class="cell">${esc(member.name)}</td>
         <td class="cell">${esc(member.address)}</td>
         <td class="cell"><a href="/members/${esc(member.id)}">View member</a></td>
-      </tr>`,
+      </tr>`
     )
     .join("\n")
 
@@ -152,11 +164,11 @@ export const searchResultsPage = (query, matches) => {
        <p>Results for &ldquo;${esc(query)}&rdquo; &mdash; ${matches.length} member(s).</p>
        ${body}
        <p><a href="/dashboard">New search</a></p>
-     </td></tr></table>`,
+     </td></tr></table>`
   )
 }
 
-const accountRows = (member) =>
+const accountRows = (member: Member): string =>
   member.accounts
     .map(
       (account) => `<tr class="row">
@@ -164,11 +176,11 @@ const accountRows = (member) =>
         <td class="cell">${esc(account.number)}</td>
         <td class="cell">${esc(account.nickname || "-")}</td>
         <td class="cell" align="right">${money(account.balance)}</td>
-      </tr>`,
+      </tr>`
     )
     .join("\n")
 
-const cardRows = (member) =>
+const cardRows = (member: Member): string =>
   member.cards
     .map((card) => {
       const status =
@@ -188,7 +200,7 @@ const cardRows = (member) =>
     })
     .join("\n")
 
-export const memberPage = (member, notice = "") =>
+export const memberPage = (member: Member, notice = ""): string =>
   layout(
     `Member ${member.id}`,
     `${notice ? `<p class="msg">${esc(notice)}</p>` : ""}
@@ -214,30 +226,41 @@ export const memberPage = (member, notice = "") =>
          <tr class="row"><th class="cell">Card</th><th class="cell">Network</th><th class="cell">Status</th><th class="cell">Action</th></tr>
          ${cardRows(member)}
        </table>
-     </td></tr></table>`,
+     </td></tr></table>`
   )
 
-export const messagePage = (title, heading, message) =>
+export const messagePage = (
+  title: string,
+  heading: string,
+  message: string
+): string =>
   layout(
     title,
     `<h1>${esc(heading)}</h1>
      <table class="tbl" border="1" cellpadding="8"><tr class="row"><td class="cell">${message}</td></tr></table>
-     <p><a href="/dashboard">Back to dashboard</a></p>`,
+     <p><a href="/dashboard">Back to dashboard</a></p>`
   )
 
 export const notFoundPage = () =>
-  messagePage("Not found", "Page not found", "The requested page does not exist on this console.")
-
+  messagePage(
+    "Not found",
+    "Page not found",
+    "The requested page does not exist on this console."
+  )
 
 const ACCOUNT_TYPES = ["savings", "checking", "money-market"]
 
-const typeOptions = (selected) =>
+const typeOptions = (selected: string): string =>
   ACCOUNT_TYPES.map(
     (type) =>
-      `<option value="${type}"${type === selected ? " selected" : ""}>${type}</option>`,
+      `<option value="${type}"${type === selected ? " selected" : ""}>${type}</option>`
   ).join("")
 
-export const accountFormPage = (member, values, error = "") =>
+export const accountFormPage = (
+  member: Member,
+  values: AccountValues,
+  error = ""
+): string =>
   layout(
     "Open sub-account",
     `<h1>Open sub-account</h1>
@@ -267,10 +290,15 @@ export const accountFormPage = (member, values, error = "") =>
          </table>
        </form>
        <p><a href="/members/${esc(member.id)}">Back to member</a></p>
-     </td></tr></table>`,
+     </td></tr></table>`
   )
 
-export const reviewPage = (member, values, deposit, error = "") =>
+export const reviewPage = (
+  member: Member,
+  values: AccountValues,
+  deposit: number,
+  error = ""
+): string =>
   layout(
     "Review sub-account",
     `<h1>Review new sub-account</h1>
@@ -311,10 +339,14 @@ export const reviewPage = (member, values, deposit, error = "") =>
          })
        }
      })()
-     </script>`,
+     </script>`
   )
 
-export const confirmationPage = (member, account, confirmationNumber) =>
+export const confirmationPage = (
+  member: Member,
+  account: Account,
+  confirmationNumber: string
+): string =>
   layout(
     "Sub-account opened",
     `<h1>Sub-account opened</h1>
@@ -329,11 +361,10 @@ export const confirmationPage = (member, account, confirmationNumber) =>
          <tr class="row"><th class="cell">Confirmation number</th><td class="cell"><b>${esc(confirmationNumber)}</b></td></tr>
        </table>
        <p><a href="/members/${esc(member.id)}">Back to member</a> &nbsp;|&nbsp; <a href="/dashboard">Dashboard</a></p>
-     </td></tr></table>`,
+     </td></tr></table>`
   )
 
-
-export const freezePage = (member, card) => {
+export const freezePage = (member: Member, card: Card): string => {
   const reasons = [
     ["lost", "Lost"],
     ["stolen", "Stolen"],
@@ -368,6 +399,6 @@ export const freezePage = (member, card) => {
          </table>
        </form>
        <p><a href="/members/${esc(member.id)}">Cancel</a></p>
-     </td></tr></table>`,
+     </td></tr></table>`
   )
 }

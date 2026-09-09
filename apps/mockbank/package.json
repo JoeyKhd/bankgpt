@@ -3,9 +3,26 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "FinCore Teller (proxy) - deliberately hostile zero-dependency mock back-office banking app; local automation target for the computer-use engine (D-040).",
+  "description": "FinCore Teller (proxy) - deliberately hostile mock back-office banking app; local automation target for the computer-use engine (D-040).",
   "scripts": {
-    "dev": "node src/server.js",
-    "start": "node src/server.js"
+    "dev": "tsx watch --env-file-if-exists=.env.local src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
+    "lint": "eslint",
+    "format": "prettier --write \"**/*.{ts,js}\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "hono": "^4.13.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "eslint": "^9.39.5",
+    "prettier": "^3.9.6",
+    "tsc-alias": "^1.9.4",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.0"
   }
 }
