@@ -1483,3 +1483,63 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **References:** Project owner's message; `apps/frontend/lib/auth.ts`;
   D-022, D-024.
 
+### D-056 — 2026-09-09T12:25:43Z — Two-phase chat approvals, live interventions, console cleanup
+
+- **Status:** accepted
+- **Decision/change:** Reworked the caller chat's risky-capability approval
+  flow from a blocking frontend-tool executor into a two-phase flow, plus a
+  batch of owner-requested UX fixes:
+  (1) `invoke_capability` now raises the approval and returns an
+  `approval_pending` marker (intervention + run ids) IMMEDIATELY instead of
+  polling the decision inside the executor for up to 30 minutes
+  (`apps/frontend/lib/engine/invoke.ts`). The chat turn settles and PERSISTS
+  right away — previously nothing persisted while the executor waited, so
+  closing the tab lost the whole exchange and a reopened thread showed
+  nothing.
+  (2) The tool-call card owns phase two: it watches the intervention (1s
+  react-query poll + engine WS broadcasts via the new
+  `useEngineEventInvalidation` hook) and completes the call with `addResult`
+  — AI SDK `addToolOutput` replaces the pending output and re-triggers the
+  custom `sendAutomaticallyWhen`, so the model reports the final outcome.
+  Because the ids persist in the tool result, a reopened thread resumes the
+  wait or completes immediately if the decision already landed.
+  (3) `sendAutomaticallyWhen` is now a custom predicate that holds the turn
+  while an `approval_pending` output is present — auto-sending on the marker
+  would add a throwaway "waiting" reply whose step-start boundary would then
+  block the outcome's auto-send (verified against ai@7.0.94 internals).
+  (4) `interventionsQuery` now polls unconditionally (3s): new requests
+  raised while the inbox is empty previously never surfaced without a manual
+  refresh. `interventionQuery` polls at 1s while pending; `runQuery` at 1s
+  while running/awaiting_approval.
+  (5) The admin sidebar's Interventions item shows a live pending-count
+  badge; `useEngineEventInvalidation` is mounted in the admin shell and the
+  chat page so decisions/runs invalidate instantly.
+  (6) Copy cleanup: the chat approval card and the console's self-requested
+  notice lost their demo narration ("you cannot approve your own request",
+  "the demo account can still answer", etc.) in favor of product wording;
+  the /chat "Caller simulation" header bar was removed; six suggestion
+  bubbles (both safe lookups + all three risky capability shapes) replace
+  the three previous ones.
+- **Why:** Owner report: approvals felt slow (2.5s+2s executor polls), a
+  pending approval vanished on page close, the thread never updated after an
+  operator decision, the inbox needed manual refresh, and the copy read like
+  a demo script instead of a product.
+- **Consequences/follow-up:** Verified by static analysis against installed
+  @assistant-ui/core 0.3.17 (ToolInvocationTracker never re-executes
+  restored tool calls with results; addResult→addToolOutput replaces by
+  toolCallId on the last message) and ai@7.0.94 (addToolOutput re-evaluates
+  sendAutomaticallyWhen when idle). Known edge: if the user keeps chatting
+  while an approval is pending, the tool call leaves the last message and
+  addResult cannot target it — the card still completes visually from live
+  query data, but the model is not told the outcome (acceptable demo cut; a
+  production fix is server-side continuation). Root format/lint/typecheck/
+  build all pass; manual verification by the owner per the testing
+  convention.
+- **References:** `apps/frontend/lib/engine/invoke.ts`,
+  `apps/frontend/app/(app)/chat/toolkit.tsx`,
+  `apps/frontend/app/(app)/chat/chat-client.tsx`,
+  `apps/frontend/lib/engine/queries.ts`,
+  `apps/frontend/lib/engine/use-engine-event-invalidation.ts`,
+  `apps/frontend/app/(app)/admin/admin-shell.tsx`,
+  `apps/frontend/components/admin/interventions-inbox.tsx`,
+  `apps/frontend/app/api/chat/route.ts`; D-046, D-047.
