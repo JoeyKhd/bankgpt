@@ -238,9 +238,24 @@ for frontend work.
   Run `pnpm install` from the **repo root**, never inside an app. Add deps
   with `pnpm --filter <pkg> add <dep>` (e.g. `pnpm --filter frontend add zod`).
 - **Root scripts fan out to workspace members** (`pnpm -r --if-present`):
-  `pnpm run dev` starts the frontend dev server, and `pnpm run build` /
-  `lint` / `typecheck` / `format` run across all packages that define them.
+  `pnpm run dev` starts EVERYTHING the product needs in parallel
+  (`--parallel`: frontend on :3000, engine on :4011, mockbank target on
+  :4010 — one command is the whole demo), and `pnpm run build` / `lint` /
+  `typecheck` / `format` run across all packages that define them.
   Running the same scripts inside `apps/frontend` also works.
+- **The engine dev server loads its own env**: its `dev` script is
+  `tsx watch --env-file-if-exists=.env.local src/index.ts`, so
+  `OPENROUTER_API_KEY` (and the port override) come from
+  `apps/engine/.env.local`. `NODE_OPTIONS=--env-file-if-exists` is NOT
+  usable (Node forbids that flag in NODE_OPTIONS) — pass it to tsx/node
+  directly.
+- **The frontend and engine ports must agree.** The frontend proxies to
+  `ENGINE_URL` (default `http://127.0.0.1:4011`) and the browser opens the
+  control channel at `NEXT_PUBLIC_ENGINE_WS_URL` (default
+  `ws://127.0.0.1:4011/ws`). If the engine binds a different port
+  (`ENGINE_PORT` in `apps/engine/.env.local`), set both frontend variables
+  to match — a mismatch shows up as the admin console's "engine offline"
+  banner and a dead live-session channel.
 
 ## Linting and formatting
 
