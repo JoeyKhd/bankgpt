@@ -138,7 +138,7 @@ export default function RootLayout({
             production only by default. */}
         <PlausibleProvider
           domain="bankgpt-app.lotshot.ai"
-          customDomain="http://joey-general-plausible-bb6764-65-108-66-106.sslip.io"
+          customDomain="https://bankgpt-plausible.lotshot.ai"
         >
           <ThemeProvider>
             <TooltipProvider>{children}</TooltipProvider>
