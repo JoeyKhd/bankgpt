@@ -3,9 +3,13 @@
  *
  * Next.js route handlers CANNOT proxy WebSocket upgrades, so the browser
  * connects DIRECTLY to the engine's /ws channel (same origin policy does
- * not apply to WebSocket; the engine binds localhost in this demo). The URL
- * comes from NEXT_PUBLIC_ENGINE_WS_URL (name-only in .env.example); it
- * defaults to the engine's dev port.
+ * not apply to WebSocket). The URL comes from NEXT_PUBLIC_ENGINE_WS_URL
+ * (name-only in .env.example); it defaults to the engine's dev port.
+ *
+ * NEXT_PUBLIC_* values are inlined into the client bundle at BUILD time, so
+ * in production ENGINE_WS_URL below is only a fallback: the real value is
+ * read server-side at request time and handed down through
+ * EngineWsUrlProvider (see ./ws-url-context, D-065).
  *
  * The channel is localhost trust-boundary (documented cut): it carries
  * control messages (pause / cede / resume) and step events, not auth. All
@@ -47,8 +51,10 @@ export type ControlCommand = {
 export const connectEngineControl = (params: {
   onEvent: (message: EngineControlMessage) => void
   onStateChange?: (open: boolean) => void
+  /** Runtime URL from useEngineWsUrl(); falls back to the build-time value. */
+  url?: string
 }): { send: (command: ControlCommand) => void; close: () => void } => {
-  const socket = new WebSocket(ENGINE_WS_URL)
+  const socket = new WebSocket(params.url ?? ENGINE_WS_URL)
   socket.onmessage = (event) => {
     try {
       params.onEvent(JSON.parse(String(event.data)) as EngineControlMessage)

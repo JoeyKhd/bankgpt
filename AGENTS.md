@@ -267,7 +267,11 @@ for frontend work.
   `ws://127.0.0.1:4011/ws`). If the engine binds a different port
   (`ENGINE_PORT` in `apps/engine/.env.local`), set both frontend variables
   to match — a mismatch shows up as the admin console's "engine offline"
-  banner and a dead live-session channel.
+  banner and a dead live-session channel. Despite the `NEXT_PUBLIC_`
+  prefix, the WS URL is **not** baked at build time: the `(app)` layout
+  reads it server-side at request time and injects it via
+  `EngineWsUrlProvider` (D-065), so production URL changes need a container
+  restart, not an image rebuild.
 
 ## Docker
 

@@ -16,11 +16,14 @@ import { useQueryClient } from "@tanstack/react-query"
 
 import { engineKeys } from "./queries"
 import { connectEngineControl, type EngineControlMessage } from "./ws"
+import { useEngineWsUrl } from "./ws-url-context"
 
 export const useEngineEventInvalidation = () => {
   const queryClient = useQueryClient()
+  const wsUrl = useEngineWsUrl()
   useEffect(() => {
     const handle = connectEngineControl({
+      url: wsUrl,
       onEvent: (message: EngineControlMessage) => {
         switch (message.type) {
           case "intervention-requested":
@@ -43,5 +46,5 @@ export const useEngineEventInvalidation = () => {
       },
     })
     return () => handle.close()
-  }, [queryClient])
+  }, [queryClient, wsUrl])
 }

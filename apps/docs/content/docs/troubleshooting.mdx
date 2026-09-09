@@ -14,6 +14,22 @@ a dead live-session channel. Start the engine with
 `pnpm --filter engine dev`, or start everything with `pnpm dev` from the
 root.
 
+## Live-session controls do nothing in production (pause/cede/resume, inbox updates)
+
+The browser connects directly to the engine's `/ws` channel. Check two
+things:
+
+1. **The public engine domain routes correctly.** Dokploy must point the
+   engine domain at the engine container's port `4011` with WebSocket
+   upgrades enabled — the Next server cannot proxy WS.
+2. **`NEXT_PUBLIC_ENGINE_WS_URL` is set on the frontend service** to that
+   public URL (e.g. `wss://engine.example.com/ws`) and the container was
+   restarted after setting it. The frontend reads it at request time and
+   injects it into the page (D-065); when it is missing the browser falls
+   back to `ws://127.0.0.1:4011/ws` — check devtools → Network → WS for
+   which URL is actually attempted. The admin **System** page shows whether
+   the variable is set.
+
 ## A risky capability refuses to replay
 
 Two gates apply, in order:

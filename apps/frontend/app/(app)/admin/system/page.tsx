@@ -62,6 +62,11 @@ export default function SystemPage() {
       present: Boolean(process.env.NEXT_PUBLIC_SITE_URL),
       required: false,
     },
+    {
+      key: "NEXT_PUBLIC_ENGINE_WS_URL",
+      present: Boolean(process.env.NEXT_PUBLIC_ENGINE_WS_URL),
+      required: false,
+    },
   ]
 
   return (

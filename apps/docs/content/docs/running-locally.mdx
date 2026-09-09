@@ -52,7 +52,10 @@ docker compose up
   live-session channel must also be publicly reachable (the browser
   connects to it directly — the Next server cannot proxy WS upgrades), so
   route a domain to engine port `4011` and set `NEXT_PUBLIC_ENGINE_WS_URL`
-  to it, e.g. `wss://engine.example.com/ws`.
+  to it, e.g. `wss://engine.example.com/ws`. The frontend server reads this
+  variable at request time and injects it into the page (D-065), so
+  changing it needs only a container restart, not an image rebuild —
+  although it is a `NEXT_PUBLIC_*` name, nothing is baked in at build time.
 - **Persistent storage**: both SQLite databases live on named volumes —
   `frontend-data` → `/data/app.sqlite` (auth + chat + app data) and
   `engine-data` → `/data/engine.sqlite` (capabilities, runs,

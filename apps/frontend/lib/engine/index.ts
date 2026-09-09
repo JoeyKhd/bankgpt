@@ -55,6 +55,7 @@ export {
   type ControlCommand,
   type EngineControlMessage,
 } from "./ws"
+export { EngineWsUrlProvider, useEngineWsUrl } from "./ws-url-context"
 export {
   artifactVersionSchema,
   businessOutcomeSchema,

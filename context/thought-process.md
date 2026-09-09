@@ -1849,3 +1849,40 @@ BLOB, createdAt`, PK `(runId, name)`) stores every evidence file as a
   stack/version shields only.
 - **References:** `README.md`, `context/assignment.md` (deliverables),
   `apps/docs/content/docs/running-locally.mdx`, `apps/docs/content/docs/cli.mdx`.
+
+## D-065 — 2026-09-09T15:40:58Z — Engine WS URL is injected at request time, not baked at build time
+
+- **Status:** accepted
+- **Decision/change:** Fixed the production live-session channel being
+  silently dead. `NEXT_PUBLIC_*` variables are inlined into the client
+  bundle at build time, so the frontend Docker image baked the dev fallback
+  `ws://127.0.0.1:4011/ws` and ignored the production
+  `NEXT_PUBLIC_ENGINE_WS_URL` set at runtime. Now `connectEngineControl`
+  takes an optional `url`, a new `EngineWsUrlProvider`/`useEngineWsUrl`
+  (`apps/frontend/lib/engine/ws-url-context.tsx`) supplies the value, and
+  the `(app)` layout reads `process.env.NEXT_PUBLIC_ENGINE_WS_URL`
+  server-side at request time and passes it down. Both consumers
+  (`useEngineEventInvalidation`, the interventions `TakeoverPanel`) go
+  through the hook; without a provider the build-time value remains the
+  fallback, so local dev is unchanged. The admin System page now lists
+  `NEXT_PUBLIC_ENGINE_WS_URL` presence. Also surfaced in this diagnosis:
+  capabilities "missing" in production were just data — the prod engine
+  starts with an empty `engine-data` volume; capabilities come from
+  running Discovery there (target `http://mockbank:4010`, the compose
+  service name).
+- **Why:** The owner deployed to Dokploy and found dev capabilities gone
+  (empty engine volume — expected) plus the WS control channel broken
+  (build-time inlining — a real bug). Runtime injection keeps the image
+  portable across environments.
+- **Consequences/follow-up:** Production WS URL changes now need a
+  container restart, not an image rebuild. `NEXT_PUBLIC_SITE_URL` needs no
+  fix: it is only read in server code (metadata, robots, sitemap, System
+  page), which evaluates env at runtime. The owner must still rotate the
+  `BETTER_AUTH_SECRET` and `OPENROUTER_API_KEY` values that were pasted
+  into chat (treated as exposed; never committed).
+- **References:** `apps/frontend/lib/engine/ws.ts`,
+  `apps/frontend/lib/engine/ws-url-context.tsx`,
+  `apps/frontend/app/(app)/layout.tsx`,
+  `apps/frontend/components/admin/interventions-inbox.tsx`,
+  `apps/docs/content/docs/troubleshooting.mdx`,
+  `apps/docs/content/docs/running-locally.mdx`.

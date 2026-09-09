@@ -36,6 +36,7 @@ import {
   postSessionAction,
   rejectIntervention,
   sessionStateQuery,
+  useEngineWsUrl,
   type EngineIntervention,
   type EngineControlMessage,
   type SessionState,
@@ -293,9 +294,11 @@ const TakeoverPanel = ({
 
   // The control channel (WS) is the only way to pause/cede/resume; the
   // browser connects directly to the engine (see lib/engine/ws.ts).
+  const wsUrl = useEngineWsUrl()
   useEffect(() => {
     if (!runId) return
     const handle = connectEngineControl({
+      url: wsUrl,
       onEvent: (message: EngineControlMessage) => {
         if (message.runId !== runId) return
         if (message.type === "control-state") {
@@ -322,7 +325,7 @@ const TakeoverPanel = ({
     })
     controlRef.current = handle as never
     return () => handle.close()
-  }, [runId, queryClient])
+  }, [runId, queryClient, wsUrl])
 
   const session: SessionState | undefined = stateQuery.data
   const owner = control?.owner ?? session?.owner ?? "automation"
