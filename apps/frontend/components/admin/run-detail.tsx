@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { ArrowLeftIcon } from "lucide-react"
 import Link from "next/link"
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 
 import {
   EngineErrorBanner,
@@ -25,6 +25,7 @@ import {
   runEvidenceQuery,
   runQuery,
   type EngineRunResult,
+  type RunStatus,
   type StepEvidence,
 } from "@/lib/engine"
 
@@ -253,13 +254,21 @@ export const RunDetail = ({ runId }: { runId: string }) => {
 
   // The evidence endpoint is append-only and does not poll on its own; the
   // run query polls every 2s while running, so refetch evidence each time
-  // the run row updates — steps stream in as they land.
+  // the run row updates — steps stream in as they land. One final refetch
+  // fires on the running -> finished transition so the last steps and the
+  // terminal state are never missed.
   const refetchEvidence = evidence.refetch
   const runUpdatedAt = run.dataUpdatedAt
   const runStatus = run.data?.status
+  const prevStatus = useRef<RunStatus | undefined>(undefined)
+  const isRunning = runStatus === "running"
   useEffect(() => {
-    if (runStatus === "running") refetchEvidence()
-  }, [runUpdatedAt, runStatus, refetchEvidence])
+    const wasRunning = prevStatus.current === "running"
+    if (isRunning || wasRunning) {
+      refetchEvidence()
+    }
+    prevStatus.current = runStatus
+  }, [runUpdatedAt, runStatus, isRunning, refetchEvidence])
 
   if (run.isPending) {
     return (
