@@ -682,7 +682,7 @@ export const startEngineServer = (options: ServerOptions) => {
   app.get("/capabilities/:id", (c) => {
     const row = getCapability(db, c.req.param("id"))
     return row
-      ? json(c, 200, { ...row, artifact: JSON.parse(row.artifact) })
+      ? json(c, 200, row)
       : json(c, 404, { error: "capability not found" })
   })
 
@@ -821,12 +821,7 @@ export const startEngineServer = (options: ServerOptions) => {
 
   app.get("/runs/:id", (c) => {
     const row = getRun(db, c.req.param("id"))
-    return row
-      ? json(c, 200, {
-          ...row,
-          result: row.result ? JSON.parse(row.result) : null,
-        })
-      : json(c, 404, { error: "run not found" })
+    return row ? json(c, 200, row) : json(c, 404, { error: "run not found" })
   })
 
   app.get("/runs/:id/evidence", (c) => {

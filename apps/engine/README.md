@@ -82,12 +82,12 @@ control channel shares the same listener via `upgradeWebSocket`.
 | --- | --- | --- |
 | GET | `/health` | liveness |
 | GET | `/capabilities` | list saved capability rows |
-| GET | `/capabilities/:id` | one capability + parsed artifact |
+| GET | `/capabilities/:id` | one capability row (`artifact` as a JSON string, like the DB row) |
 | POST | `/capabilities` | save/upsert an artifact (zod-validated) |
 | POST | `/capabilities/:id/review` | mark reviewed |
 | POST | `/discover` | start a discovery run (async, `{goal, targetUrl, model?}`, 202 + WS) |
 | POST | `/replay` | start a replay run (async, `{capabilityId, inputs, approvalToken?}`, 202 + WS) |
-| GET | `/runs` / `/runs/:id` | run rows + parsed results |
+| GET | `/runs` / `/runs/:id` | run rows (`result` as a JSON string, like the DB row) |
 | GET | `/runs/:id/evidence` | step log for a run |
 | GET | `/approvals` | list interventions/approvals |
 | POST | `/approvals` | request-first approval for a risky capability (creates the run, status `awaiting_approval`, 201 + `{id, runId}`) |
