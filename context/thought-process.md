@@ -158,8 +158,8 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `apps/frontend/pnpm-workspace.yaml` and `pnpm-lock.yaml` were removed, and
   its `allowBuilds` map moved to the root workspace file. Root scripts fan
   out: `pnpm run dev` starts the frontend via `pnpm --filter frontend run
-  dev`; `build` / `lint` / `typecheck` / `format` run via `pnpm -r
-  --if-present`. Root `.gitignore` now ignores `node_modules/`.
+dev`; `build` / `lint` / `typecheck` / `format` run via `pnpm -r
+--if-present`. Root `.gitignore` now ignores `node_modules/`.
 - **Why:** The owner needs `pnpm run dev` from the workspace root and a
   monorepo layout for future packages. The scaffold's embedded `.git` (one
   auto-generated "feat: initial commit", no remote) blocked a normal commit,
@@ -226,7 +226,7 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **Consequences/follow-up:** Verified end-to-end: schema migration created
   the four auth tables; dev-server smoke test signed up a user, validated the
   session cookie, and signed in; smoke data removed afterward. `git
-  check-ignore` confirms every `data/*.sqlite*` variant is ignored. All
+check-ignore` confirms every `data/*.sqlite*` variant is ignored. All
   format/lint/typecheck/build checks pass. The CLI's migrate prompt needs a
   `y` confirmation when run manually.
 - **References:** Project owner's request; better-auth docs (basic-usage,
@@ -244,7 +244,7 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **Why:** The owner asked for both, so a fresh checkout or session always has
   working local auth config without committing secrets.
 - **Consequences/follow-up:** `.env.local` is gitignored (verified with `git
-  check-ignore`) and was created in this change with a generated secret;
+check-ignore`) and was created in this change with a generated secret;
   `.env.example` remains the committed, value-free reference.
 - **References:** Project owner's request; `apps/frontend/.env.example`; D-010.
 
@@ -310,7 +310,7 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **Decision/change:** Per the project owner, chat and agent surfaces are
   built with assistant-ui (https://www.assistant-ui.com) on top of the AI
   SDK + OpenRouter stack. Installed `@assistant-ui/react`, `@assistant-ui/
-  ai-sdk`, and `@ai-sdk/react` in `apps/frontend`. Documented in `AGENTS.md`
+ai-sdk`, and `@ai-sdk/react` in `apps/frontend`. Documented in `AGENTS.md`
   #### AI SDK: AI SDK v7 runtime (`useChatRuntime` client-side; route
   handlers stream with `streamText` + async `convertToModelMessages` and
   return `createUIMessageStreamResponse`), markdown-first docs (`.md` URLs),
@@ -436,7 +436,7 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   image based on DESIGN.md, with design material saved in context/design.
 - **Consequences/follow-up:** Regenerate the OG image with
   `npx playwright screenshot --viewport-size=1200,630
-  context/design/og-image.html context/design/og-image.png` after brand or
+context/design/og-image.html context/design/og-image.png` after brand or
   copy changes. The OG image is not yet referenced from app metadata — wire
   it when the app's public pages take shape.
 - **References:** Project owner's request; D-017; `context/design/`;
@@ -564,7 +564,7 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **Why:** Project owner direction. The assignment's actor #1 (the calling
   AI agent that supplies goals and invokes capabilities) must be visible in
   the demo or the "agent-invocable capability" story is only a claim in
-  REPORT.md. The chat LLM decides *what*; the engine decides *how* — the
+  REPORT.md. The chat LLM decides _what_; the engine decides _how_ — the
   model must never drive the target UI directly or the demo undermines
   itself.
 - **Consequences/follow-up:** Until the engine persists real capabilities,
@@ -843,7 +843,6 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `apps/frontend/components/assistant-ui/elements/model-icons.tsx`,
   <https://openrouter.ai/announcements/introducing-nitro-and-floor-price-shortcuts>.
 
-
 ## D-037 — 2026-09-08T23:21:24Z — Persist generated thread titles (title was lost on refresh)
 
 - **Status:** accepted
@@ -1000,7 +999,7 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **Consequences/follow-up:** `apps/mockbank` is demo infrastructure, not
   the product; REPORT.md's Cuts section notes that real targets are legacy
   third-party apps. The stub catalog's `targetApp: "FinCore Teller
-  (proxy)"` becomes literally true.
+(proxy)"` becomes literally true.
 - **References:** assignment §4 (target application is our call; local
   sample app explicitly allowed); `apps/frontend/lib/capabilities-catalog.ts`.
 
@@ -1016,7 +1015,7 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   (runs, artifacts, interventions) persists in the engine's own SQLite
   database, separate from the auth DB.
 - **Why:** The assignment's handoff requires live, bidirectional
-  pause/cede/resume against the *same* running session — shared-SQLite
+  pause/cede/resume against the _same_ running session — shared-SQLite
   polling can't do that cleanly (D-023's open question). An explicit
   control channel keeps ownership unambiguous and matches the "clean seam"
   the assignment rewards.
@@ -1034,12 +1033,12 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   Node `node:http` server-rendered teller console (port 4010, localhost),
   implementing the three stub-catalog workflows — member search → detail →
   balances; open sub-account (form → review with a native `window.confirm`
-  + checkbox → confirmation with `?c=CNF-####`); freeze card (reason select
-  → Frozen). 7 deterministic seed members; `POST /__reset__` reseeds and
-  clears sessions. Deliberate hostility per D-040: nested-table layouts, no
-  ids/data-*/test-ids (real `<button>/<a>/<input>/<select>/<label>` so a11y
-  locators work), 50–400 ms latency (1–2 s search), a per-session
-  every-7th-GET transient 500, and 5-minute inactivity session expiry.
+  - checkbox → confirmation with `?c=CNF-####`); freeze card (reason select
+    → Frozen). 7 deterministic seed members; `POST /__reset__` reseeds and
+    clears sessions. Deliberate hostility per D-040: nested-table layouts, no
+    ids/data-*/test-ids (real `<button>/<a>/<input>/<select>/<label>` so a11y
+    locators work), 50–400 ms latency (1–2 s search), a per-session
+    every-7th-GET transient 500, and 5-minute inactivity session expiry.
 - **Why:** Gives the engine a safe, reproducible target that exercises the
   exact exceptional states the replay error taxonomy must handle, with no
   terms/PII exposure.
@@ -1181,7 +1180,7 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   still pending.
 - **Decision/change:** (1) **Approval segregation** — a risky capability
   invoked in `/chat` now raises an identity-carrying approval/intervention
-  decided by a *different* authenticated operator in `/admin/interventions`
+  decided by a _different_ authenticated operator in `/admin/interventions`
   instead of the requesting user self-approving; approval tokens are scoped
   per capability/run; approver identity + timestamp + reason are persisted
   as evidence. Safe capabilities still replay straight through; the stub
@@ -1644,7 +1643,7 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
 - **Decision/change:** ALL run evidence now lives in the engine's own
   SQLite database (`apps/engine/data/engine.sqlite`) instead of the
   filesystem. A new `run_files` table (`runId, name, contentType, data
-  BLOB, createdAt`, PK `(runId, name)`) stores every evidence file as a
+BLOB, createdAt`, PK `(runId, name)`) stores every evidence file as a
   blob: `steps.jsonl` (one blob, buffered in the writer and rewritten on
   each logged step), `transcript.json`, `result.json`, `control.json`,
   `failure-step-N.png/.yml`, `handoff-step-N.png/.yml`. `createEvidenceWriter`
@@ -1825,3 +1824,28 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   sign-up + sign-in succeed, and Chromium still launches in the engine.
 - **References:** `docker-compose.yaml`, `.env.example`, `README.md`,
   `apps/docs/content/docs/running-locally.mdx`, `AGENTS.md`; D-062.
+
+## D-064 — 2026-09-09T14:48:28Z — Root README.md rewrite + repository rename to bankgpt
+
+- **Status:** accepted
+- **Decision/change:** Rewrote the deliverable **`/README.md`** (assignment
+  deliverable #2, replacing the plain text version): a BankGPT-branded
+  root README with an up-front
+  assignment banner (take-home for interface.ai, linking
+  `context/assignment.md` + `REPORT.md`), tech badges, the
+  discover → distill → replay → escalate → evidence story, quick-start and
+  Docker instructions, the graded CLI demo path (`discover` then `replay`),
+  and a screenshot tour reusing the docs assets
+  (`apps/docs/public/screenshots/*`: console overview, discovery run
+  detail, capability detail, caller chat, interventions inbox, mockbank
+  member page). Also: the GitHub repository was renamed from
+  `JoeyKhd/interface-ai` to **`JoeyKhd/bankgpt`** (owner direction); the
+  local `origin` remote was updated to match.
+- **Why:** The assignment requires `/README.md` with setup/run
+  instructions, required keys, and the exact demo commands; the repo was
+  renamed to the product brand.
+- **Consequences/follow-up:** Badge and link URLs target
+  `github.com/JoeyKhd/bankgpt`. No CI exists, so badges are static
+  stack/version shields only.
+- **References:** `README.md`, `context/assignment.md` (deliverables),
+  `apps/docs/content/docs/running-locally.mdx`, `apps/docs/content/docs/cli.mdx`.

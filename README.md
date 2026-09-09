@@ -1,226 +1,168 @@
-# BankGPT — computer-use automation for back-office banking apps
+<div align="center">
 
-**interface.ai engineering take-home** — the backend integration layer that
-gives an AI agent hands inside applications with no API.
+<img src="apps/frontend/public/bankgpt-logo.svg" alt="BankGPT" width="220" />
 
-An LLM **discovers** a back-office UI flow once — driving a real browser,
-observing the accessibility tree, one structured model call per step — and
-the successful run is distilled into a typed, versioned **capability
-artifact**. From then on the flow **replays deterministically with zero
-model calls**: a calling AI agent invokes the capability with typed inputs
-and gets back typed outputs, a known business outcome, or a debuggable
-failure. Human operators approve risky actions (with maker ≠ checker
-segregation) and can take over the **same live session** when automation
-gets stuck, then hand control back.
+# BankGPT — Computer-Use Automation System
 
-- Design write-up: **[REPORT.md](REPORT.md)**
-- Graded run evidence (genuine discovery + replay runs): lives in the
-  engine's SQLite DB (D-059) — see
-  [REPORT.md#architecture](REPORT.md#architecture) and the query notes
-  below
-- Decision ledger (D-001…D-050): [context/thought-process.md](context/thought-process.md)
-- Assignment: [context/assignment.md](context/assignment.md)
+**An LLM discovers a back-office UI flow once. The run becomes a typed, reviewable capability. From then on it replays deterministically — zero model calls.**
 
-## Monorepo layout
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![Hono](https://img.shields.io/badge/Hono-4-E36002?logo=hono&logoColor=white)](https://hono.dev/)
+[![Playwright](https://img.shields.io/badge/Playwright-1.63-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/)
+[![AI SDK](https://img.shields.io/badge/AI_SDK-v7-000000?logo=vercel&logoColor=white)](https://ai-sdk.dev/)
+[![Zod](https://img.shields.io/badge/Zod-4-3E67B1?logo=zod&logoColor=white)](https://zod.dev/)
+[![SQLite](https://img.shields.io/badge/SQLite-better--sqlite3-003B57?logo=sqlite&logoColor=white)](https://github.com/WiseLibs/better-sqlite3)
+[![pnpm](https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![Docker](https://img.shields.io/badge/Docker-compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Assignment](https://img.shields.io/badge/interface.ai-take--home_assignment-8B5CF6)](context/assignment.md)
 
-| Path | What it is |
-| --- | --- |
-| `apps/engine` | The automation service: LLM discovery loop, artifact schema, deterministic replay, policy/redaction, approvals, live-session handoff. TypeScript ESM, Hono HTTP API + WebSocket control channel (default port `4011`), SQLite via better-sqlite3. |
-| `apps/frontend` | Operator console + caller simulation. Next.js 16.2.6 (App Router) + React 19 + Tailwind 4 + shadcn, better-auth, assistant-ui + AI SDK v7. `/admin` is the operator console (capabilities, runs, discovery, interventions inbox with take-over panel); `/chat` simulates the calling AI agent invoking capabilities. Default port `3000`. |
-| `apps/mockbank` | **FinCore Teller** — the proxy target. A zero-dependency (`node:http`), deliberately hostile mock back-office banking console: legacy table markup, no test IDs, artificial latency, a transient HTTP 500 every 7th GET, session expiry, and a native `window.confirm` gate. Default port `4010`. |
-| `apps/docs` | This documentation site. Fumadocs (Next.js 16 + Fumadocs MDX) in the BankGPT dark-only brand; content lives in `apps/docs/content/docs/`. Default port `3001`. |
-| `context/` | Assignment, product brief, decision ledger, research. |
-| `docker-compose.yaml` + per-app `Dockerfile` | One-command container stack: frontend, engine (with Chromium), mockbank, docs; SQLite databases persist on named volumes. |
+</div>
 
-Run evidence is not a checked-in folder: every run's step log, transcript,
-result, and failure/handoff screenshots are stored as blobs in the engine's
-SQLite DB (`run_files` table, D-059) and served over the engine HTTP API at
-`/runs/:id/files` and `/runs/:id/files/:name`.
+---
 
-## Setup
+> [!IMPORTANT]
+> **🎓 This repository is a take-home assignment submission for the [interface.ai](https://interface.ai) engineering team.** It is our working answer to the _Computer-Use Automation System_ brief: build the backend integration layer that lets an AI agent get real work done inside back-office banking applications that expose **no API**. The authoritative requirements live in [`context/assignment.md`](context/assignment.md), the full design write-up in [`REPORT.md`](REPORT.md), and every meaningful decision in the ledger at [`context/thought-process.md`](context/thought-process.md).
 
-Requirements: **Node 22+** and **pnpm 10** (`packageManager` is pinned).
+## 🤔 What is this?
 
-```bash
-pnpm install                                          # from the repo root
-pnpm --filter engine exec playwright install chromium # one-time browser download
+Banks and credit unions run on a long tail of legacy back-office software — core banking screens, servicing tools, admin consoles — where the only way in is to drive the UI the way a human operator would. BankGPT is the layer that gives an AI agent **hands** inside those applications:
+
+1. 🔍 **Discover** — hand the engine a natural-language goal and a target app. A real LLM drives a live browser (observe the accessibility tree → decide → act, one structured model call per step) until the goal is met.
+2. 📦 **Distill** — the successful run is distilled into a typed, versioned, human-reviewable **capability artifact**: ordered steps, strategy-tagged locators with fallbacks, typed inputs/outputs, and a machine-checkable success checkpoint.
+3. ▶️ **Replay** — a calling agent invokes the capability with typed inputs. Replay uses **zero model calls**: stable a11y-first targeting, per-step checkpoints, transient-retry, and one of four typed results (`success` · `business_outcome` · `recoverable` · `hard_failure`).
+4. 🙋 **Escalate** — risky actions need a segregated human approval (maker ≠ checker), and a stuck run hands the **same live browser session** to a human operator and back over a WebSocket control channel.
+5. 🧾 **Leave evidence** — every run stores redacted step logs, the model transcript, failure screenshots, and the control log in the engine's SQLite DB, served back over the engine API.
+
+```
+goal → discovery (model in the loop) → artifact (typed contract)
+     → replay (no model) → structured result
 ```
 
-Environment:
+<div align="center">
+  <img src="apps/docs/public/screenshots/admin-overview.png" alt="BankGPT automation console — overview" width="900" />
+</div>
 
-- **`OPENROUTER_API_KEY`** — the one external-service key. Needed for
-  discovery (the engine's model calls) and for the `/chat` caller
-  simulation. Put it in **`apps/engine/.env.local`** (copy
-  `apps/engine/.env.example`) and/or **`apps/frontend/.env.local`** (copy
-  `apps/frontend/.env.example`). Replay never needs it.
-- **`BETTER_AUTH_SECRET`** — required by the frontend for auth
-  (`apps/frontend/.env.local`); generate locally with
-  `openssl rand -base64 32`. It is a local signing secret, not a service key.
-- Optional, all with working defaults: `ENGINE_PORT` (4011),
-  `ENGINE_DB_PATH` (engine); `ENGINE_URL`
-  (`http://127.0.0.1:4011`) and `NEXT_PUBLIC_ENGINE_WS_URL`
-  (`ws://127.0.0.1:4011/ws`) (frontend → engine wiring; the browser connects
-  to the WS directly because Next route handlers cannot proxy upgrades).
+## 🚀 Quick start
 
-Never commit real keys: both `.env.local` files are gitignored, and the
-engine redacts secret/PII-shaped values from everything it persists.
-
-## Run
-
-**One command starts the whole demo** (mockbank :4010 + engine :4011 +
-frontend :3000 + docs :3001, in parallel) — do not also start the services
-individually:
+Requirements: **Node 22+** and **pnpm 10** (pinned in `package.json`).
 
 ```bash
-pnpm dev                      # everything → http://localhost:3000 (docs: :3001)
+# 1. Install (from the repo root — pnpm workspace, never install inside an app)
+pnpm install
+pnpm --filter engine exec playwright install chromium   # one-time browser download
+
+# 2. Configure keys
+cp apps/engine/.env.example apps/engine/.env.local      # add OPENROUTER_API_KEY
+cp apps/frontend/.env.example apps/frontend/.env.local  # add BETTER_AUTH_SECRET (+ OPENROUTER_API_KEY for /chat)
+
+# 3. One-time auth schema migration (first run only)
+cd apps/frontend && pnpm dlx @better-auth/cli@latest migrate --config lib/auth.ts && cd ../..
+
+# 4. Start EVERYTHING in parallel
+pnpm dev   # mockbank :4010 · engine :4011 · frontend :3000 · docs :3001
 ```
 
-Or run the same stack in Docker (`docker compose up` — see the Docker
-section below for persistent SQLite volumes and the `targetUrl` caveat).
+Open **http://localhost:3000** and register — **the first registered user becomes the admin**. `/chat` is the caller simulation; `/admin` is the operator console.
 
-### Docker (alternative)
+🐳 **Docker instead?** `cp .env.example .env`, fill in the two required keys, then `docker compose build && docker compose up`. Compose publishes no host ports — services talk on the internal network (routing is configured externally in Dokploy), and both SQLite databases persist on named volumes.
 
-The same stack runs in containers — one image per app
-(`apps/frontend/Dockerfile`, `apps/engine/Dockerfile`,
-`apps/mockbank/Dockerfile`, `apps/docs/Dockerfile`) plus a root
-`docker-compose.yaml`:
+## 🎯 The graded demo: discover → replay
+
+The assignment's demo path needs only the mockbank target and the engine CLI:
 
 ```bash
-cp .env.example .env   # set BETTER_AUTH_SECRET + OPENROUTER_API_KEY
-docker compose build
-docker compose up
-```
-
-Compose publishes **no host ports** — all four services talk on the
-internal Docker network. Routing is configured externally (we use Dokploy):
-point public domains at the internal container ports — frontend `3000`,
-docs `3001`, engine `4011`, mockbank `4010`. The engine also needs a public
-domain for its `/ws` live-session channel (the browser connects directly);
-set `NEXT_PUBLIC_ENGINE_WS_URL` to it, e.g. `wss://engine.example.com/ws`.
-
-Both SQLite databases persist on named volumes (`frontend-data` →
-`/data/app.sqlite`, `engine-data` → `/data/engine.sqlite`); they survive
-`docker compose down` and are only wiped by `docker compose down -v`. The
-engine image ships Chromium, so discovery and replay work in containers —
-but the Playwright browser runs **inside the engine's network**, so a
-discovery `targetUrl` must use the service name (`http://mockbank:4010`),
-not `localhost`. The frontend container seeds the better-auth
-schema onto a fresh volume on first boot (a build-time migrated database
-is baked into the image and copied over only when the volume is empty).
-
-Open `http://localhost:3000` and register — **the first registered user is
-the admin**. `/chat` is the caller simulation (ask it to look up a member or
-open a sub-account; risky capabilities raise a segregated operator
-approval). `/admin` holds the capability catalog, run history, discovery
-form, and the interventions inbox with the live-session take-over panel.
-
-If you ever need one service on its own (debugging, the CLI demo below),
-use the per-app scripts (`pnpm --filter mockbank dev`,
-`pnpm --filter engine dev`, `pnpm --filter frontend dev`) — but then do not
-also run `pnpm dev`, or the ports collide.
-
-First run only: the frontend's auth schema must exist before sign-in works.
-If `apps/frontend/data/app.sqlite` does not exist yet, create it once:
-
-```bash
-cd apps/frontend && pnpm dlx @better-auth/cli@latest migrate --config lib/auth.ts
-```
-
-## Demo path (discover → replay)
-
-The graded demo is CLI-driven and needs only the mockbank + the engine CLI
-(the dev server and console are not required for it). `POST /__reset__`
-reseeds the target so account/confirmation counters and the transient-500
-cadence are deterministic — run it before each run:
-
-```bash
+# Reset the target so counters and the transient-500 cadence are deterministic
 curl -X POST http://127.0.0.1:4010/__reset__
 
-# 1. Genuine LLM-driven discovery (requires OPENROUTER_API_KEY).
-#    The model drives a live Chromium via the accessibility tree, then the
-#    run is distilled into a typed capability artifact.
+# 1️⃣ Genuine LLM-driven discovery (needs OPENROUTER_API_KEY)
 pnpm --filter engine discover \
   --goal "Log in to the teller console and read member 100231's savings and checking balances" \
   --target http://127.0.0.1:4010
 
-pnpm --filter engine discover \
-  --goal "Open a new savings sub-account for member 100231 with an initial deposit of 250 and reach the confirmation screen" \
-  --target http://127.0.0.1:4010
-
-#    Each discover prints the RETURNED artifact id (savedArtifactId) — use
-#    exactly that id below. Freshly distilled artifacts are reviewed:false.
-
-# 2. Review the artifact (required before a RISKY capability replays).
-#    Human review is part of the workflow: read the stored artifact
-#    (query the capabilities table, or GET /capabilities/<id> with the
-#    server running), fix target bindings or detect strings if needed,
-#    then re-import + mark it reviewed. Safe capabilities replay
-#    unreviewed; risky ones do not.
-#      - Read the stored artifact with:
-#          sqlite3 apps/engine/data/engine.sqlite \
-#            "SELECT artifact FROM capabilities WHERE id='<id>'"
-#        With the server running: POST /capabilities (import the edited
-#        artifact) then POST /capabilities/<id>/review.
-#      - For the CLI demo the stored graded artifacts already carry
-#        reviewed:true from their documented review pass (below).
-
-# 3. Deterministic replay (ZERO model calls; no API key needed).
+# 2️⃣ Deterministic replay — ZERO model calls, no API key needed
 pnpm --filter engine replay --capability get_member_balances --input memberId=100231
-
-# Exceptional replays — expected business outcomes, not crashes:
-curl -X POST http://127.0.0.1:4010/__reset__
-pnpm --filter engine replay --capability get_member_balances --input memberId=999999
-#   → business_outcome: member_not_found
-
-pnpm --filter engine replay --capability open_sub_account \
-  --input memberId=100231 --input accountType=savings --input initialDeposit=250
-#   → success {accountNumber: "7100070001", confirmationNumber: "CNF-5001"}
-
-pnpm --filter engine replay --capability open_sub_account \
-  --input memberId=100231 --input accountType=savings --input initialDeposit=-50
-#   → business_outcome: invalid_input ("Initial deposit cannot be negative.")
 ```
 
-Notes on the replay path:
+`discover` prints the `savedArtifactId`; `replay` prints a structured result with the extracted balances. Freshly distilled artifacts are `reviewed: false` — **risky** capabilities only replay after a human review pass marks them `reviewed: true`.
 
-- CLI replay reads the artifact from the engine DB (the `capabilities`
-  table in `apps/engine/data/engine.sqlite`, written there by `discover`).
-  The **reviewed, graded artifacts** are already stored there (imported
-  from the retired on-disk bundle, D-059) — nothing to copy. To inspect
-  one by hand:
-  `sqlite3 apps/engine/data/engine.sqlite "SELECT json_extract(artifact, '$.version'), reviewed FROM capabilities WHERE id='open_sub_account'"`
-  or, with the engine server running, `GET /capabilities/<id>`.
-- The risky `open_sub_account` artifact replays via CLI because CLI runs are
-  operator-invoked (approval is implicit), but policy still refuses an
-  **unreviewed** risky artifact — the graded artifact carries
-  `reviewed: true` from its documented human review pass.
+<details>
+<summary>🔎 <strong>Inspecting run evidence with SQL</strong></summary>
 
-## Running without live services
+All evidence lives in the engine DB (`apps/engine/data/engine.sqlite`):
 
-- The mockbank target is fully local — no external calls, no credentials
-  (any sign-in works), only fictional seed data.
-- **Replay is model-free**: once an artifact exists, replay needs no
-  `OPENROUTER_API_KEY` and no network beyond localhost. Only **discovery**
-  (and the `/chat` simulation) calls a model.
-- The console degrades gracefully when the engine is offline: the
-  `/api/engine/*` proxy answers 503 with a hint, client fetchers raise a
-  typed `EngineOfflineError`, and the `/admin` overview falls back to the
-  stub catalog with an amber offline banner.
+```sql
+SELECT id, version, risk, reviewed FROM capabilities;
+SELECT artifact FROM capabilities WHERE id = 'get_member_balances';
+SELECT name, length(data) AS bytes FROM run_files WHERE runId = '<runId>';
+```
 
-## Where to look next
+or over the API: `curl http://127.0.0.1:4011/runs/<runId>/evidence`.
 
-- **[REPORT.md](REPORT.md)** — architecture, artifact schema, determinism &
-  error handling, heterogeneity/multi-tenant design, escalation & handoff,
-  safety, cuts.
-- **The graded run evidence (D-059)** — stored in the engine DB, not a
-  checked-in folder: two genuine discovery runs, happy-path + exceptional
-  replays, a transient-500 recovery probe, a deterministic-repeat run, and
-  the two segregation-of-duties proof runs (segregated approval; stuck →
-  live-session take-over → resume). Browse runs in the `/admin` console or
-  query directly, e.g.
-  `sqlite3 apps/engine/data/engine.sqlite "SELECT id, kind, status FROM runs"`
-  and `sqlite3 apps/engine/data/engine.sqlite "SELECT name, contentType, length(data) FROM run_files WHERE runId='<runId>'"`;
-  with the engine server running, `GET /runs`, `GET /runs/:id/evidence`,
-  and `GET /runs/:id/files[/:name]` serve the same rows over HTTP.
-- `apps/engine/README.md` — engine architecture page, full HTTP/WS API.
-- `apps/mockbank/README.md` — the target's seed data and deliberate hostility.
+</details>
+
+## 🖼️ A tour in screenshots
+
+|                                                🔍 Discovery, step by step                                                 |                                               📦 The capability artifact                                               |
+| :-----------------------------------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------------------------: |
+| ![Discovery run detail — every step with the model's reason](apps/docs/public/screenshots/admin-run-detail-discovery.png) | ![Capability detail — typed inputs/outputs, steps, locators](apps/docs/public/screenshots/admin-capability-detail.png) |
+|                      A genuine discovery run: 9 steps, each with the model's reasoning and evidence.                      |       The distilled contract: typed I/O, ordered steps, a11y-first locators with fallbacks and robustness notes.       |
+
+|                                      💬 Caller simulation                                       |                                        🙋 Interventions inbox                                         |
+| :---------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------: |
+| ![Caller chat — the AI agent invokes saved capabilities](apps/docs/public/screenshots/chat.png) | ![Interventions — approvals and live take-over](apps/docs/public/screenshots/admin-interventions.png) |
+| The calling AI agent (assistant-ui + AI SDK v7) invokes capabilities by name with typed inputs. |        Risky invocations wait on a segregated approval; stuck runs hand over the live session.        |
+
+**The hostile target — FinCore Teller** (`apps/mockbank`): legacy table markup with no ids or test IDs, random latency, a transient HTTP 500 every 7th authenticated GET, 5-minute session expiry, and a native `window.confirm` gating the risky submit. If the automation works here, it isn't lucky.
+
+<div align="center">
+  <img src="apps/docs/public/screenshots/mockbank-member.png" alt="FinCore Teller — the deliberately hostile mock back-office console" width="720" />
+</div>
+
+## 🏗️ Architecture
+
+Three processes with explicit boundaries — plus this docs site:
+
+| App                              | Role                                                                                                                                                                                                            |   Port |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -----: |
+| [`apps/engine`](apps/engine)     | 🤖 The graded core: discovery loop, artifact schema, deterministic replay, policy & redaction, approvals, live-session handoff. Hono HTTP API + WebSocket control channel, SQLite (`run_files` evidence blobs). | `4011` |
+| [`apps/frontend`](apps/frontend) | 🖥️ Operator console (`/admin`: capabilities, runs, discovery, interventions inbox with live take-over) + caller simulation (`/chat`). Next.js 16 · React 19 · better-auth · assistant-ui.                       | `3000` |
+| [`apps/mockbank`](apps/mockbank) | 🏦 FinCore Teller — zero-dependency `node:http` mock back-office console; the deliberately hostile proxy target.                                                                                                | `4010` |
+| [`apps/docs`](apps/docs)         | 📚 Full documentation site (Fumadocs): architecture, artifact contract, replay semantics, API reference, CLI.                                                                                                   | `3001` |
+
+- **Accessibility-tree-first computer use.** Discovery observes `page.ariaSnapshot()` + a screenshot, decides with one structured call per step (AI SDK v7 `generateText` + `Output.object` against a fixed zod action vocabulary), and acts through Playwright `getByRole`. Pixel coordinates are never recorded.
+- **One model, used sparingly.** Discovery and distillation ran on `google/gemini-2.5-flash` via OpenRouter: one structured call per discovery step, one more to distill, **zero on replay**.
+- **The artifact is the contract.** One zod schema (`apps/engine/src/artifact.ts`) is the single source of truth shared by the discovery model, the human reviewer, the replay executor, and the calling agent.
+
+## 📚 Documentation
+
+- 📄 **[`REPORT.md`](REPORT.md)** — the graded design report: Architecture · Artifact schema · Determinism & error handling · Heterogeneity & multi-tenant · Escalation & handoff · Safety · Cuts.
+- 🧭 **[`context/thought-process.md`](context/thought-process.md)** — the decision ledger (D-001…D-062): every meaningful choice, with reasons.
+- 📖 **Docs site** — `pnpm dev` then http://localhost:3001 (or see [`apps/docs/content/docs`](apps/docs/content/docs)): running locally, operator console tour, engine API, CLI reference, evidence & storage, troubleshooting.
+- 🗂️ **[`context/assignment.md`](context/assignment.md)** — the original assignment brief.
+
+## 🔐 Safety & data handling
+
+- ✅ Explicit, configurable **allowlist** of permitted scope and actions; risky/irreversible actions are a separate class treated conservatively.
+- ✅ **Maker ≠ checker**: risky capabilities require review, and risky invocations carry a single-use approval token decided by a _different_ operator.
+- ✅ **Redaction everywhere**: credential- and PII-shaped values are scrubbed before anything is persisted — artifacts, step logs, transcripts, screenshots, and every JSON response.
+- ✅ The demo target accepts any credentials; **no real credentials or personal data** are used anywhere.
+
+## 🧰 Workspace commands
+
+```bash
+pnpm dev         # start the whole demo in parallel
+pnpm build       # build all packages
+pnpm lint        # ESLint across the workspace
+pnpm typecheck   # tsc across the workspace
+pnpm format      # Prettier across the workspace
+```
+
+---
+
+<div align="center">
+
+Built as an engineering take-home for **[interface.ai](https://interface.ai)** — the through-line: _the model discovers, the artifact becomes a reusable capability, and replay never needs the model again._
+
+</div>
