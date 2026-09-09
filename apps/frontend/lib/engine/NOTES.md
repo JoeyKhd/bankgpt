@@ -68,3 +68,39 @@ The owner runs the engine separately. When it is unreachable:
 `ENGINE_URL` (OPTIONAL) added to `apps/frontend/.env.example`; set
 explicitly in `.env.local` for dev. Server-side only — never
 `NEXT_PUBLIC_`, the browser only ever sees `/api/engine/*`.
+
+
+## Phase 3 — console pages built on this layer (appended)
+
+The four `/admin` surfaces now consume these queries live (PageStub replaced
+everywhere except `/admin/interventions`, which a sibling worker owns):
+
+- `components/admin/engine-providers.tsx` mounts the `QueryClientProvider`
+  in `app/(app)/admin/layout.tsx` — required before any hook here works.
+- `components/admin/engine-ui.tsx` holds the shared query states (offline
+  banner matching the `/admin` overview pattern, error banner, skeletons,
+  empty states) plus status/risk/kind pills and date/duration formatters.
+- `/admin/capabilities` — `capabilitiesQuery` deduped by id (latest version
+  first, same rule as the overview); target app and step count are enriched
+  per card from `capabilityQuery(id)` because list rows carry no artifact.
+- `/admin/capabilities/[id]` — full artifact rendering (steps with
+  primary/fallback locators + robustness, typed inputs/outputs, final
+  checkpoint, business outcomes), `markCapabilityReviewed`, and a replay
+  form (`@tanstack/react-form`, per-input zod validators derived from the
+  artifact's typed inputs) that calls `startReplay` and links to the run.
+- `/admin/runs` + `/admin/runs/[id]` — run history and detail. The result
+  union narrows at render time: replay success shows `outputs`, discovery
+  success shows `goal`/`capabilityId`; `hard_failure` renders expected vs
+  observed side by side.
+- `/admin/discover` — `startDiscovery` form (goal + http(s) targetUrl +
+  optional model), then embeds `RunDetail` for the new run.
+
+Live-streaming note: `runEvidenceQuery` deliberately does not poll (it is
+append-only). `RunDetail` refetches evidence whenever the polling
+`runQuery` row updates while `status === "running"`, so steps stream in
+every ~2s without changing `lib/engine`.
+
+Contract notes: no screenshot/artifact-binary endpoint exists — hard
+failures surface `evidenceDir` (a path on the engine host), which the UI
+renders as a path hint only. The capability list endpoint exposes no
+`targetApp`/step count, hence the per-card detail fetch.
