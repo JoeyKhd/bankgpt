@@ -42,9 +42,10 @@ goal ─▶ discovery (observe → decide → act, LLM each step) ─▶ capabil
   discovery transcript. Everything redacted before writing.
 - **`src/db.ts`** — SQLite (better-sqlite3, WAL): capabilities, runs,
   interventions/approvals.
-- **`src/server.ts`** — HTTP API + WebSocket control channel (pause / cede /
-  resume for the live-session handoff). `src/session.ts` holds the session
-  registry + control state machine.
+- **`src/server.ts`** — Hono HTTP API (@hono/node-server) + WebSocket
+  control channel (pause / cede / resume for the live-session handoff),
+  bodies validated with @hono/zod-validator. `src/session.ts` holds the
+  session registry + control state machine.
 - **`src/cli.ts`** — the demo entrypoint (below).
 
 ## Setup
@@ -72,24 +73,35 @@ failure screenshots) in `apps/engine/evidence/runs/<runId>/`.
 
 ## HTTP API (`pnpm --filter engine dev`, default port 4011)
 
+The HTTP surface is a **Hono** app served by `@hono/node-server`; request
+bodies are validated with `@hono/zod-validator` (zod schemas in
+`src/server.ts`); every JSON response is policy-redacted. The WebSocket
+control channel shares the same listener via `upgradeWebSocket`.
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/health` | liveness |
 | GET | `/capabilities` | list saved capability rows |
 | GET | `/capabilities/:id` | one capability + parsed artifact |
-| POST | `/capabilities` | save/upsert an artifact |
+| POST | `/capabilities` | save/upsert an artifact (zod-validated) |
 | POST | `/capabilities/:id/review` | mark reviewed |
-| POST | `/discover` | start a discovery run (async, `{goal, targetUrl, model?}`) |
-| POST | `/replay` | start a replay run (async, `{capabilityId, inputs, approvalToken?}`) |
+| POST | `/discover` | start a discovery run (async, `{goal, targetUrl, model?}`, 202 + WS) |
+| POST | `/replay` | start a replay run (async, `{capabilityId, inputs, approvalToken?}`, 202 + WS) |
 | GET | `/runs` / `/runs/:id` | run rows + parsed results |
 | GET | `/runs/:id/evidence` | step log for a run |
 | GET | `/approvals` | list interventions/approvals |
-| POST | `/approvals/:id/approve` / `reject` | answer an approval (approve issues a one-time token) |
+| POST | `/approvals` | request-first approval for a risky capability (creates the run, status `awaiting_approval`, 201 + `{id, runId}`) |
+| GET | `/approvals/:id` | one intervention |
+| POST | `/approvals/:id/approve` / `reject` | answer an approval (approve issues a one-time scoped token and starts the run; identity-carrying `decidedBy` required) |
+| GET | `/sessions/:runId/state` | live session state (ownership, url, aria, screenshot, control log) |
+| POST | `/sessions/:runId/action` | one manual operator action on the live session (human-owned only; also at the unsuffixed `/sessions/:runId`) |
 
-WebSocket at `/ws`: streams `run-step` / `run-finished` /
-`capability-saved` / `intervention-requested` events, and accepts
-`{type: "pause"|"cede"|"resume", runId, operator?}` control messages for
-the live-session handoff.
+WebSocket at `/ws` (browser connects directly via
+`NEXT_PUBLIC_ENGINE_WS_URL`): streams `run-step` / `run-finished` /
+`capability-saved` / `intervention-requested` / `session-opened` /
+`session-closed` / `control-state` / `human-action` events, and accepts
+`{type: "pause"|"cede"|"resume"|"human-action", runId, operator?, detail?}`
+control messages for the live-session handoff.
 
 ## Environment
 

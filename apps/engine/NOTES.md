@@ -178,3 +178,39 @@ specifiers, not `@/`) and dropping NodeNext for bundler resolution (would
 stop catching missing-extension mistakes the service still needs at Node
 runtime). `tsc-alias` is the least-ugly mechanism that keeps both runtimes
 honest.
+
+## HTTP server: Hono (2026-09-09, owner direction)
+
+Owner direction: adopt Hono for the HTTP API + WebSocket server instead of
+the hand-rolled `node:http` router. `src/server.ts` is now a Hono app
+(`hono` + `@hono/node-server`), bodies validated with
+`@hono/zod-validator` against zod schemas colocated in the file; the WS
+control channel runs on the same listener via `upgradeWebSocket` + a
+`WebSocketServer({ noServer: true })` passed to `serve()` (the current
+`@hono/node-server` pattern — `@hono/node-ws` is deprecated; `ws` stays a
+direct dependency for that server).
+
+Behavior is unchanged — verified by execution against the live mockbank:
+
+- Same routes/methods/status codes/JSON shapes, including 202 async
+  run-start, 201 approval creation, 400/403/404/409/500 error bodies
+  (`{ error }` with the exact previous messages — the zod schemas carry
+  the messages as per-field `error` strings and the validation hook
+  answers the first issue).
+- Invalid artifact JSON still answers 500 (it previously threw into the
+  catch-all); malformed JSON bodies answer 400 (Hono's HTTPException is
+  re-shaped to the redacted `{ error }` form in `app.onError`).
+- `POST /sessions/:runId` (unsuffixed) remains the action endpoint the
+  frontend client calls; the `/action` + `/state` suffixed aliases route
+  to the same handlers.
+- Every JSON response still flows through `policy.redactValue` (the
+  `json()` helper wraps `c.json`).
+- The WS protocol is byte-identical: `hello` + redacted event broadcasts
+  (`run-step`, `run-finished`, `capability-saved`, `intervention-requested`,
+  `control-state`, `human-action`, `session-opened`/`session-closed`) and
+  inbound `pause`/`cede`/`resume`/`human-action`; the registry + control
+  state machine in `src/session.ts` is untouched. `WSContext` objects are
+  tracked directly; `ws.OPEN` was replaced by the literal readyState `1`.
+- Proof runs: CLI `replay get_member_balances memberId=100231` → success
+  with the expected balances, and `POST /replay` → 202 → WS step stream →
+  `run-finished` success against `pnpm --filter engine dev`.

@@ -1,5 +1,6 @@
 /**
- * Engine server (D-041 + D-046): HTTP API + WebSocket control channel.
+ * Engine server (D-041 + D-046): Hono HTTP API + WebSocket control channel
+ * (@hono/node-server).
  *
  * HTTP (JSON):
  *   GET  /health
@@ -21,8 +22,15 @@
  *   POST /approvals/:id/reject            decide + stop the run
  *   GET  /sessions/:runId/state           live session state (screenshot, aria,
  *                                         ownership, control log)
+ *   GET  /sessions/:runId                 same state (unsuffixed alias)
  *   POST /sessions/:runId/action          execute a manual operator action on
  *                                         the live session (human-owned only)
+ *   POST /sessions/:runId                 same action (unsuffixed alias)
+ *
+ * Request bodies are validated with @hono/zod-validator against the zod
+ * schemas below; failures answer the same `{ error }` shape and status the
+ * hand-rolled checks produced. Every JSON response is redacted through
+ * policy.redactValue before it leaves the process.
  *
  * Approval segregation (D-046): a risky capability never runs on the
  * requester's own say-so. The requester (chat user, CLI, API caller) raises
@@ -44,17 +52,19 @@
  * WebSocket (/ws): step events for discovery AND replay + control channel
  * (pause/cede/resume/human-action) for the handoff.
  */
-import {
-  createServer,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { randomUUID } from "node:crypto"
-import { WebSocketServer, type WebSocket } from "ws"
+import { Hono, type Context } from "hono"
+import { HTTPException } from "hono/http-exception"
+import type { ContentfulStatusCode } from "hono/utils/http-status"
+import type { WSContext } from "hono/ws"
+import { serve, upgradeWebSocket, type WebSocketLike } from "@hono/node-server"
+import { zValidator } from "@hono/zod-validator"
+import { WebSocketServer } from "ws"
 import { chromium, type Browser } from "playwright"
 import type Database from "better-sqlite3"
+import { z } from "zod"
 import { CapabilityArtifactSchema } from "@/artifact"
 import {
   getCapability,
@@ -112,26 +122,107 @@ export type ServerOptions = {
 
 const DEFAULT_MODEL = "google/gemini-2.5-flash"
 
-const json = (res: ServerResponse, status: number, body: unknown): void => {
-  res.writeHead(status, { "content-type": "application/json" })
-  res.end(JSON.stringify(redactValue(body)))
-}
+/** Every JSON response leaves through policy redaction, exactly as before. */
+const json = <T>(c: Context, status: ContentfulStatusCode, body: T): Response =>
+  c.json(redactValue(body) as T, status)
 
-const readBody = (req: IncomingMessage): Promise<unknown> =>
-  new Promise((resolve, reject) => {
-    let data = ""
-    req.on("data", (chunk: Buffer) => (data += chunk.toString()))
-    req.on("end", () => {
-      try {
-        resolve(data ? JSON.parse(data) : {})
-      } catch (err) {
-        reject(err)
-      }
-    })
-    req.on("error", reject)
-  })
+/** ws/WebSocket.OPEN — WSContext exposes the raw readyState number. */
+const WS_OPEN = 1
 
-type ReplayInputs = Record<string, string | number | boolean>
+// ---------------------------------------------------------------------------
+// Request body schemas (zod; enforced by @hono/zod-validator). The per-field
+// `error` strings keep the exact messages the hand-rolled checks answered.
+// ---------------------------------------------------------------------------
+
+const replayInputsSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean()])
+)
+
+const discoverBodySchema = z.object({
+  goal: z
+    .string({ error: "goal and targetUrl are required" })
+    .min(1, "goal and targetUrl are required"),
+  targetUrl: z
+    .string({ error: "goal and targetUrl are required" })
+    .min(1, "goal and targetUrl are required"),
+  model: z.string().optional(),
+})
+
+const replayBodySchema = z.object({
+  capabilityId: z
+    .string({ error: "capabilityId is required" })
+    .min(1, "capabilityId is required"),
+  inputs: replayInputsSchema.optional(),
+  approvalToken: z.string().optional(),
+  requestedBy: z.string().optional(),
+})
+
+const approvalRequestBodySchema = z.object({
+  capabilityId: z
+    .string({ error: "capabilityId and requestedBy are required" })
+    .min(1, "capabilityId and requestedBy are required"),
+  inputs: replayInputsSchema.optional(),
+  requestedBy: z
+    .string({ error: "capabilityId and requestedBy are required" })
+    .min(1, "capabilityId and requestedBy are required"),
+  reason: z.string().optional(),
+})
+
+const decisionBodySchema = z.object({
+  decidedBy: z
+    .string({ error: "decidedBy is required" })
+    .min(1, "decidedBy is required"),
+  reason: z.string().optional(),
+})
+
+/** Loose shape only — executeHumanAction owns action-level errors (409s). */
+const sessionActionBodySchema = z.object({
+  action: z.string().optional(),
+  role: z.string().optional(),
+  name: z.string().optional(),
+  value: z.string().optional(),
+  key: z.string().optional(),
+  url: z.string().optional(),
+  operator: z.string().optional(),
+})
+
+/** Shared validation hook: first issue message, same `{ error }` shape. */
+const invalidBody = (
+  error: { issues: ReadonlyArray<{ message: string }> },
+  c: Context
+): Response =>
+  json(c, 400, { error: error.issues[0]?.message ?? "invalid request body" })
+
+const artifactBody = zValidator("json", CapabilityArtifactSchema, (r, c) => {
+  // An unparseable artifact previously threw into the catch-all (500).
+  if (!r.success) return json(c, 500, { error: r.error.message })
+})
+const discoverBody = zValidator("json", discoverBodySchema, (r, c) => {
+  if (!r.success) return invalidBody(r.error, c)
+})
+const replayBody = zValidator("json", replayBodySchema, (r, c) => {
+  if (!r.success) return invalidBody(r.error, c)
+})
+const approvalRequestBody = zValidator(
+  "json",
+  approvalRequestBodySchema,
+  (r, c) => {
+    if (!r.success) return invalidBody(r.error, c)
+  }
+)
+const decisionBody = zValidator("json", decisionBodySchema, (r, c) => {
+  if (!r.success) return invalidBody(r.error, c)
+})
+const sessionActionBody = zValidator(
+  "json",
+  sessionActionBodySchema,
+  (r, c) => {
+    if (!r.success) return invalidBody(r.error, c)
+  }
+)
+
+type ReplayInputs = z.infer<typeof replayInputsSchema>
 
 export const startEngineServer = (options: ServerOptions) => {
   const policy = options.policy ?? defaultPolicy()
@@ -150,11 +241,11 @@ export const startEngineServer = (options: ServerOptions) => {
   /** Evidence writers of in-flight runs, so human actions land in the log. */
   const activeEvidence = new Map<string, EvidenceWriter>()
 
-  const wsClients = new Set<WebSocket>()
+  const wsClients = new Set<WSContext<WebSocketLike>>()
   const broadcast = (event: unknown): void => {
     const payload = JSON.stringify(redactValue(event))
     for (const client of wsClients) {
-      if (client.readyState === client.OPEN) client.send(payload)
+      if (client.readyState === WS_OPEN) client.send(payload)
     }
   }
 
@@ -557,589 +648,561 @@ export const startEngineServer = (options: ServerOptions) => {
     return { ok: true, detail }
   }
 
-  const handleRequest = async (
-    req: IncomingMessage,
-    res: ServerResponse
-  ): Promise<void> => {
-    const url = new URL(req.url ?? "/", `http://localhost:${options.port}`)
-    const parts = url.pathname.split("/").filter(Boolean)
-    const method = req.method ?? "GET"
+  const app = new Hono()
 
-    try {
-      if (method === "GET" && url.pathname === "/health") {
-        return json(res, 200, { ok: true, service: "engine" })
-      }
+  // The old catch-all: any unexpected throw answers 500 { error }. The
+  // validator raises HTTPException(400) for malformed JSON bodies — keep its
+  // status but the same JSON shape.
+  app.onError((err, c) => {
+    if (err instanceof HTTPException) {
+      // Raised by the validator for malformed JSON bodies (status 400);
+      // keep its status but answer the same redacted { error } JSON shape.
+      return new Response(JSON.stringify(redactValue({ error: err.message })), {
+        status: err.status,
+        headers: { "content-type": "application/json" },
+      })
+    }
+    return json(c, 500, {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  })
+  app.notFound((c) => json(c, 404, { error: "not found" }))
 
-      if (method === "GET" && url.pathname === "/capabilities") {
-        return json(res, 200, listCapabilities(db))
-      }
-      if (
-        method === "GET" &&
-        parts[0] === "capabilities" &&
-        parts.length === 2
-      ) {
-        const row = getCapability(db, parts[1]!)
-        return row
-          ? json(res, 200, { ...row, artifact: JSON.parse(row.artifact) })
-          : json(res, 404, { error: "capability not found" })
-      }
-      if (method === "POST" && url.pathname === "/capabilities") {
-        const body = await readBody(req)
-        const artifact = CapabilityArtifactSchema.parse(body)
-        insertCapability(db, {
-          id: artifact.id,
-          version: artifact.version,
-          name: artifact.name,
-          risk: artifact.risk,
-          reviewed: artifact.reviewed ? 1 : 0,
-          createdAt: artifact.createdAt,
-          artifact: JSON.stringify(artifact),
-        })
-        return json(res, 201, { id: artifact.id, version: artifact.version })
-      }
-      if (
-        method === "POST" &&
-        parts[0] === "capabilities" &&
-        parts[2] === "review"
-      ) {
-        const row = getCapability(db, parts[1]!)
-        if (!row) return json(res, 404, { error: "capability not found" })
-        setCapabilityReviewed(db, parts[1]!, true)
-        return json(res, 200, { id: parts[1], reviewed: true })
-      }
+  app.get("/health", (c) => json(c, 200, { ok: true, service: "engine" }))
 
-      if (method === "POST" && url.pathname === "/discover") {
-        const body = (await readBody(req)) as {
-          goal?: string
-          targetUrl?: string
-          model?: string
-        }
-        if (!body.goal || !body.targetUrl) {
-          return json(res, 400, { error: "goal and targetUrl are required" })
-        }
-        const runId = randomUUID()
-        const { evidence, session } = await prepareRun({
-          runId,
-          kind: "discovery",
-          capabilityId: null,
+  app.get("/capabilities", (c) => json(c, 200, listCapabilities(db)))
+
+  app.get("/capabilities/:id", (c) => {
+    const row = getCapability(db, c.req.param("id"))
+    return row
+      ? json(c, 200, { ...row, artifact: JSON.parse(row.artifact) })
+      : json(c, 404, { error: "capability not found" })
+  })
+
+  app.post("/capabilities", artifactBody, (c) => {
+    const artifact = c.req.valid("json")
+    insertCapability(db, {
+      id: artifact.id,
+      version: artifact.version,
+      name: artifact.name,
+      risk: artifact.risk,
+      reviewed: artifact.reviewed ? 1 : 0,
+      createdAt: artifact.createdAt,
+      artifact: JSON.stringify(artifact),
+    })
+    return json(c, 201, { id: artifact.id, version: artifact.version })
+  })
+
+  app.post("/capabilities/:id/review", (c) => {
+    const id = c.req.param("id")
+    const row = getCapability(db, id)
+    if (!row) return json(c, 404, { error: "capability not found" })
+    setCapabilityReviewed(db, id, true)
+    return json(c, 200, { id, reviewed: true })
+  })
+
+  app.post("/discover", discoverBody, async (c) => {
+    const body = c.req.valid("json")
+    const runId = randomUUID()
+    const { evidence, session } = await prepareRun({
+      runId,
+      kind: "discovery",
+      capabilityId: null,
+      goal: body.goal,
+      targetUrl: body.targetUrl,
+    })
+    if (!session) throw new Error("live session was not created")
+    // Runs async; clients follow progress on the WS channel or poll /runs/:id.
+    void (async () => {
+      try {
+        const result = await runDiscovery({
           goal: body.goal,
           targetUrl: body.targetUrl,
-        })
-        if (!session) throw new Error("live session was not created")
-        // Runs async; clients follow progress on the WS channel or poll /runs/:id.
-        void (async () => {
-          try {
-            const result = await runDiscovery({
-              goal: body.goal!,
-              targetUrl: body.targetUrl!,
-              policy,
-              evidence,
-              runId,
-              model: body.model ?? discoveryModel,
-              apiKey,
-              browser: await getBrowser(),
-              session,
-              handoff: makeStuckHandoff({
-                runId,
-                evidence,
-                session,
-                contextBase: { goal: body.goal },
-              }),
-              events: {
-                onStep: (stepIndex, decision, ok) =>
-                  broadcast({
-                    type: "run-step",
-                    runId,
-                    stepIndex,
-                    action: decision.action,
-                    intent: decision.reasoning,
-                    ok,
-                  }),
-              },
-              onArtifact: (artifact) => {
-                insertCapability(db, {
-                  id: artifact.id,
-                  version: artifact.version,
-                  name: artifact.name,
-                  risk: artifact.risk,
-                  reviewed: 0,
-                  createdAt: artifact.createdAt,
-                  artifact: JSON.stringify(artifact),
-                })
-                broadcast({
-                  type: "capability-saved",
-                  runId,
-                  capabilityId: artifact.id,
-                })
-              },
-            })
-            evidence.writeResult(result)
-            await completeRun(runId, result, evidence)
-          } catch (err) {
-            const result = {
-              status: "hard_failure" as const,
-              expected: "discovery completes",
-              observed: err instanceof Error ? err.message : String(err),
-              evidenceDir: evidence.runDir,
-              durationMs: 0,
-            }
-            evidence.writeResult(result)
-            await completeRun(runId, result, evidence)
-          }
-        })()
-        return json(res, 202, { runId })
-      }
-
-      if (method === "POST" && url.pathname === "/replay") {
-        const body = (await readBody(req)) as {
-          capabilityId?: string
-          inputs?: ReplayInputs
-          approvalToken?: string
-          requestedBy?: string
-        }
-        if (!body.capabilityId) {
-          return json(res, 400, { error: "capabilityId is required" })
-        }
-        const row = getCapability(db, body.capabilityId)
-        if (!row) return json(res, 404, { error: "capability not found" })
-        // Approval tokens are scoped: approved + this capability + unused.
-        let approved = false
-        let approvalInterventionId: string | undefined
-        if (body.approvalToken) {
-          const check = checkApprovalToken(
-            body.capabilityId,
-            body.approvalToken
-          )
-          if (!check.ok) return json(res, 403, { error: check.error })
-          approved = true
-          approvalInterventionId = check.intervention.id
-        }
-        const runId = randomUUID()
-        const { evidence, session } = await prepareRun({
-          runId,
-          kind: "replay",
-          capabilityId: body.capabilityId,
-          goal: null,
-          targetUrl: null,
-        })
-        if (!session) throw new Error("live session was not created")
-        launchReplayRun({
-          runId,
-          capabilityRow: row,
-          inputs: body.inputs ?? {},
-          approved,
-          approvalInterventionId,
+          policy,
           evidence,
+          runId,
+          model: body.model ?? discoveryModel,
+          apiKey,
+          browser: await getBrowser(),
           session,
-        })
-        return json(res, 202, { runId })
-      }
-
-      if (method === "GET" && url.pathname === "/runs") {
-        return json(res, 200, listRuns(db))
-      }
-      if (method === "GET" && parts[0] === "runs" && parts.length === 2) {
-        const row = getRun(db, parts[1]!)
-        return row
-          ? json(res, 200, {
-              ...row,
-              result: row.result ? JSON.parse(row.result) : null,
-            })
-          : json(res, 404, { error: "run not found" })
-      }
-      if (method === "GET" && parts[0] === "runs" && parts[2] === "evidence") {
-        const row = getRun(db, parts[1]!)
-        if (!row || !row.evidenceDir) {
-          return json(res, 404, { error: "run or evidence not found" })
-        }
-        const stepsPath = join(row.evidenceDir, "steps.jsonl")
-        const steps = existsSync(stepsPath)
-          ? readFileSync(stepsPath, "utf8")
-              .split("\n")
-              .filter(Boolean)
-              .map((line) => JSON.parse(line))
-          : []
-        return json(res, 200, { runId: row.id, steps })
-      }
-
-      if (method === "GET" && url.pathname === "/approvals") {
-        return json(res, 200, listInterventions(db))
-      }
-
-      // Request-first approval (D-046): the requester raises an
-      // operator-decidable record BEFORE anything risky executes. The run
-      // row exists immediately (status "awaiting_approval"); approval
-      // starts it, rejection stops it.
-      if (method === "POST" && url.pathname === "/approvals") {
-        const body = (await readBody(req)) as {
-          capabilityId?: string
-          inputs?: ReplayInputs
-          requestedBy?: string
-          reason?: string
-        }
-        if (!body.capabilityId || !body.requestedBy) {
-          return json(res, 400, {
-            error: "capabilityId and requestedBy are required",
-          })
-        }
-        const row = getCapability(db, body.capabilityId)
-        if (!row) return json(res, 404, { error: "capability not found" })
-        if (row.risk !== "risky") {
-          return json(res, 400, {
-            error: `capability "${body.capabilityId}" is ${row.risk} — approval is only required for risky capabilities`,
-          })
-        }
-        const artifact = CapabilityArtifactSchema.parse(
-          JSON.parse(row.artifact)
-        )
-        // Reject malformed inputs now, not after a human spent a decision.
-        const inputs = validateInputs(artifact, body.inputs ?? {})
-        const runId = randomUUID()
-        await prepareRun({
-          runId,
-          kind: "replay",
-          capabilityId: body.capabilityId,
-          goal: null,
-          targetUrl: null,
-          status: "awaiting_approval",
-          withSession: false,
-        })
-        const interventionId = randomUUID()
-        insertIntervention(db, {
-          id: interventionId,
-          runId,
-          kind: "approval",
-          status: "pending",
-          reason:
-            body.reason ??
-            `capability "${body.capabilityId}" is risky and requires operator approval`,
-          context: JSON.stringify({
-            capabilityId: body.capabilityId,
-            inputs,
-            source: "request",
+          handoff: makeStuckHandoff({
+            runId,
+            evidence,
+            session,
+            contextBase: { goal: body.goal },
           }),
-          createdAt: new Date().toISOString(),
-          resolvedAt: null,
-          requestedBy: body.requestedBy,
-          decidedBy: null,
-          decisionReason: null,
-          approvalToken: null,
-          consumedByRunId: null,
-        })
-        broadcast({
-          type: "intervention-requested",
-          runId,
-          interventionId,
-          kind: "approval",
-        })
-        // The run waits; its evidence writer stays registered so the
-        // decision + any later human actions land in its log.
-        return json(res, 201, { id: interventionId, runId })
-      }
-
-      if (method === "GET" && parts[0] === "approvals" && parts.length === 2) {
-        const row = getIntervention(db, parts[1]!)
-        return row
-          ? json(res, 200, row)
-          : json(res, 404, { error: "intervention not found" })
-      }
-
-      if (
-        method === "POST" &&
-        parts[0] === "approvals" &&
-        parts[2] === "approve"
-      ) {
-        const body = (await readBody(req)) as {
-          decidedBy?: string
-          reason?: string
-        }
-        if (!body.decidedBy) {
-          return json(res, 400, { error: "decidedBy is required" })
-        }
-        const row = getIntervention(db, parts[1]!)
-        if (!row) return json(res, 404, { error: "intervention not found" })
-        if (row.status !== "pending") {
-          return json(res, 409, {
-            error: `intervention is already ${row.status}`,
-          })
-        }
-        if (row.kind !== "approval") {
-          return json(res, 400, {
-            error: `intervention kind "${row.kind}" is not decidable here`,
-          })
-        }
-        const token = randomUUID()
-        // Segregation metadata: same-person decisions are recorded and
-        // flagged, not blocked (single-account demos stay possible; the
-        // evidence says who decided — see NOTES).
-        const selfApproved =
-          row.requestedBy !== null && row.requestedBy === body.decidedBy
-        resolveIntervention(db, row.id, "approved", {
-          decidedBy: body.decidedBy,
-          decisionReason: body.reason,
-          approvalToken: token,
-        })
-        mergeInterventionContext(db, row.id, { selfApproved })
-
-        // Auto-start the approved run. Request-first approvals already have
-        // their run row (awaiting_approval); engine fail-fast approvals
-        // launch a fresh run with the original inputs.
-        const context = JSON.parse(row.context) as {
-          capabilityId?: string
-          inputs?: ReplayInputs
-        }
-        let executionRunId: string | null = null
-        if (context.capabilityId) {
-          const capabilityRow = getCapability(db, context.capabilityId)
-          if (capabilityRow) {
-            const existingRun = row.runId ? getRun(db, row.runId) : undefined
-            if (existingRun && existingRun.status === "awaiting_approval") {
-              const session = await createLiveSession(
-                await getBrowser(),
-                existingRun.id
-              )
-              const evidence = createEvidenceWriter(evidenceDir, existingRun.id)
-              activeEvidence.set(existingRun.id, evidence)
-              setRunStatus(db, existingRun.id, "running")
-              executionRunId = existingRun.id
-              launchReplayRun({
-                runId: existingRun.id,
-                capabilityRow,
-                inputs: context.inputs ?? {},
-                approved: true,
-                approvalInterventionId: row.id,
-                evidence,
-                session,
-              })
-            } else {
-              const newRunId = randomUUID()
-              const { evidence, session } = await prepareRun({
-                runId: newRunId,
-                kind: "replay",
-                capabilityId: context.capabilityId,
-                goal: null,
-                targetUrl: null,
-              })
-              if (!session) throw new Error("live session was not created")
-              executionRunId = newRunId
-              launchReplayRun({
-                runId: newRunId,
-                capabilityRow,
-                inputs: context.inputs ?? {},
-                approved: true,
-                approvalInterventionId: row.id,
-                evidence,
-                session,
-              })
-            }
-            mergeInterventionContext(db, row.id, {
-              executionRunId,
+          events: {
+            onStep: (stepIndex, decision, ok) =>
+              broadcast({
+                type: "run-step",
+                runId,
+                stepIndex,
+                action: decision.action,
+                intent: decision.reasoning,
+                ok,
+              }),
+          },
+          onArtifact: (artifact) => {
+            insertCapability(db, {
+              id: artifact.id,
+              version: artifact.version,
+              name: artifact.name,
+              risk: artifact.risk,
+              reviewed: 0,
+              createdAt: artifact.createdAt,
+              artifact: JSON.stringify(artifact),
             })
-            activeEvidence.get(executionRunId!)?.logStep({
-              runId: executionRunId!,
+            broadcast({
+              type: "capability-saved",
+              runId,
+              capabilityId: artifact.id,
+            })
+          },
+        })
+        evidence.writeResult(result)
+        await completeRun(runId, result, evidence)
+      } catch (err) {
+        const result = {
+          status: "hard_failure" as const,
+          expected: "discovery completes",
+          observed: err instanceof Error ? err.message : String(err),
+          evidenceDir: evidence.runDir,
+          durationMs: 0,
+        }
+        evidence.writeResult(result)
+        await completeRun(runId, result, evidence)
+      }
+    })()
+    return json(c, 202, { runId })
+  })
+
+  app.post("/replay", replayBody, async (c) => {
+    const body = c.req.valid("json")
+    const row = getCapability(db, body.capabilityId)
+    if (!row) return json(c, 404, { error: "capability not found" })
+    // Approval tokens are scoped: approved + this capability + unused.
+    let approved = false
+    let approvalInterventionId: string | undefined
+    if (body.approvalToken) {
+      const check = checkApprovalToken(body.capabilityId, body.approvalToken)
+      if (!check.ok) return json(c, 403, { error: check.error })
+      approved = true
+      approvalInterventionId = check.intervention.id
+    }
+    const runId = randomUUID()
+    const { evidence, session } = await prepareRun({
+      runId,
+      kind: "replay",
+      capabilityId: body.capabilityId,
+      goal: null,
+      targetUrl: null,
+    })
+    if (!session) throw new Error("live session was not created")
+    launchReplayRun({
+      runId,
+      capabilityRow: row,
+      inputs: body.inputs ?? {},
+      approved,
+      approvalInterventionId,
+      evidence,
+      session,
+    })
+    return json(c, 202, { runId })
+  })
+
+  app.get("/runs", (c) => json(c, 200, listRuns(db)))
+
+  app.get("/runs/:id", (c) => {
+    const row = getRun(db, c.req.param("id"))
+    return row
+      ? json(c, 200, {
+          ...row,
+          result: row.result ? JSON.parse(row.result) : null,
+        })
+      : json(c, 404, { error: "run not found" })
+  })
+
+  app.get("/runs/:id/evidence", (c) => {
+    const row = getRun(db, c.req.param("id"))
+    if (!row || !row.evidenceDir) {
+      return json(c, 404, { error: "run or evidence not found" })
+    }
+    const stepsPath = join(row.evidenceDir, "steps.jsonl")
+    const steps = existsSync(stepsPath)
+      ? readFileSync(stepsPath, "utf8")
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => JSON.parse(line))
+      : []
+    return json(c, 200, { runId: row.id, steps })
+  })
+
+  app.get("/approvals", (c) => json(c, 200, listInterventions(db)))
+
+  // Request-first approval (D-046): the requester raises an
+  // operator-decidable record BEFORE anything risky executes. The run
+  // row exists immediately (status "awaiting_approval"); approval
+  // starts it, rejection stops it.
+  app.post("/approvals", approvalRequestBody, async (c) => {
+    const body = c.req.valid("json")
+    const row = getCapability(db, body.capabilityId)
+    if (!row) return json(c, 404, { error: "capability not found" })
+    if (row.risk !== "risky") {
+      return json(c, 400, {
+        error: `capability "${body.capabilityId}" is ${row.risk} — approval is only required for risky capabilities`,
+      })
+    }
+    const artifact = CapabilityArtifactSchema.parse(JSON.parse(row.artifact))
+    // Reject malformed inputs now, not after a human spent a decision.
+    const inputs = validateInputs(artifact, body.inputs ?? {})
+    const runId = randomUUID()
+    await prepareRun({
+      runId,
+      kind: "replay",
+      capabilityId: body.capabilityId,
+      goal: null,
+      targetUrl: null,
+      status: "awaiting_approval",
+      withSession: false,
+    })
+    const interventionId = randomUUID()
+    insertIntervention(db, {
+      id: interventionId,
+      runId,
+      kind: "approval",
+      status: "pending",
+      reason:
+        body.reason ??
+        `capability "${body.capabilityId}" is risky and requires operator approval`,
+      context: JSON.stringify({
+        capabilityId: body.capabilityId,
+        inputs,
+        source: "request",
+      }),
+      createdAt: new Date().toISOString(),
+      resolvedAt: null,
+      requestedBy: body.requestedBy,
+      decidedBy: null,
+      decisionReason: null,
+      approvalToken: null,
+      consumedByRunId: null,
+    })
+    broadcast({
+      type: "intervention-requested",
+      runId,
+      interventionId,
+      kind: "approval",
+    })
+    // The run waits; its evidence writer stays registered so the
+    // decision + any later human actions land in its log.
+    return json(c, 201, { id: interventionId, runId })
+  })
+
+  app.get("/approvals/:id", (c) => {
+    const row = getIntervention(db, c.req.param("id"))
+    return row
+      ? json(c, 200, row)
+      : json(c, 404, { error: "intervention not found" })
+  })
+
+  app.post("/approvals/:id/approve", decisionBody, async (c) => {
+    const body = c.req.valid("json")
+    const row = getIntervention(db, c.req.param("id"))
+    if (!row) return json(c, 404, { error: "intervention not found" })
+    if (row.status !== "pending") {
+      return json(c, 409, {
+        error: `intervention is already ${row.status}`,
+      })
+    }
+    if (row.kind !== "approval") {
+      return json(c, 400, {
+        error: `intervention kind "${row.kind}" is not decidable here`,
+      })
+    }
+    const token = randomUUID()
+    // Segregation metadata: same-person decisions are recorded and
+    // flagged, not blocked (single-account demos stay possible; the
+    // evidence says who decided — see NOTES).
+    const selfApproved =
+      row.requestedBy !== null && row.requestedBy === body.decidedBy
+    resolveIntervention(db, row.id, "approved", {
+      decidedBy: body.decidedBy,
+      decisionReason: body.reason,
+      approvalToken: token,
+    })
+    mergeInterventionContext(db, row.id, { selfApproved })
+
+    // Auto-start the approved run. Request-first approvals already have
+    // their run row (awaiting_approval); engine fail-fast approvals
+    // launch a fresh run with the original inputs.
+    const context = JSON.parse(row.context) as {
+      capabilityId?: string
+      inputs?: ReplayInputs
+    }
+    let executionRunId: string | null = null
+    if (context.capabilityId) {
+      const capabilityRow = getCapability(db, context.capabilityId)
+      if (capabilityRow) {
+        const existingRun = row.runId ? getRun(db, row.runId) : undefined
+        if (existingRun && existingRun.status === "awaiting_approval") {
+          const session = await createLiveSession(
+            await getBrowser(),
+            existingRun.id
+          )
+          const evidence = createEvidenceWriter(evidenceDir, existingRun.id)
+          activeEvidence.set(existingRun.id, evidence)
+          setRunStatus(db, existingRun.id, "running")
+          executionRunId = existingRun.id
+          launchReplayRun({
+            runId: existingRun.id,
+            capabilityRow,
+            inputs: context.inputs ?? {},
+            approved: true,
+            approvalInterventionId: row.id,
+            evidence,
+            session,
+          })
+        } else {
+          const newRunId = randomUUID()
+          const { evidence, session } = await prepareRun({
+            runId: newRunId,
+            kind: "replay",
+            capabilityId: context.capabilityId,
+            goal: null,
+            targetUrl: null,
+          })
+          if (!session) throw new Error("live session was not created")
+          executionRunId = newRunId
+          launchReplayRun({
+            runId: newRunId,
+            capabilityRow,
+            inputs: context.inputs ?? {},
+            approved: true,
+            approvalInterventionId: row.id,
+            evidence,
+            session,
+          })
+        }
+        mergeInterventionContext(db, row.id, {
+          executionRunId,
+        })
+        activeEvidence.get(executionRunId)?.logStep({
+          runId: executionRunId,
+          stepIndex: -1,
+          at: new Date().toISOString(),
+          action: "approval",
+          reason: `approved by ${body.decidedBy}${selfApproved ? " (self-approved — requester and decider coincide)" : ""}${body.reason ? ` — ${body.reason}` : ""}; run started`,
+          durationMs: 0,
+          result: "ok",
+        })
+      }
+    }
+    broadcast({
+      type: "intervention-resolved",
+      interventionId: row.id,
+      runId: executionRunId,
+      status: "approved",
+      decidedBy: body.decidedBy,
+      selfApproved,
+    })
+    return json(c, 200, {
+      id: row.id,
+      runId: executionRunId,
+      selfApproved,
+    })
+  })
+
+  app.post("/approvals/:id/reject", decisionBody, async (c) => {
+    const body = c.req.valid("json")
+    const row = getIntervention(db, c.req.param("id"))
+    if (!row) return json(c, 404, { error: "intervention not found" })
+    if (row.status !== "pending") {
+      return json(c, 409, {
+        error: `intervention is already ${row.status}`,
+      })
+    }
+    const selfApproved =
+      row.requestedBy !== null && row.requestedBy === body.decidedBy
+    resolveIntervention(db, row.id, "rejected", {
+      decidedBy: body.decidedBy,
+      decisionReason: body.reason,
+    })
+    mergeInterventionContext(db, row.id, { selfApproved })
+    // A request-first run never executes: it stops where it waited.
+    if (row.runId) {
+      const run = getRun(db, row.runId)
+      if (run && run.status === "awaiting_approval") {
+        activeEvidence.get(row.runId)?.logStep({
+          runId: row.runId,
+          stepIndex: -1,
+          at: new Date().toISOString(),
+          action: "approval",
+          reason: `rejected by ${body.decidedBy}${selfApproved ? " (self-approved — requester and decider coincide)" : ""}${body.reason ? ` — ${body.reason}` : ""}; run stopped without executing`,
+          durationMs: 0,
+          result: "skipped",
+        })
+        setRunStatus(db, row.runId, "stopped")
+        activeEvidence.delete(row.runId)
+        const session = getSession(row.runId)
+        if (session) await closeLiveSession(row.runId)
+        broadcast({ type: "run-finished", runId: row.runId, result: null })
+      }
+    }
+    broadcast({
+      type: "intervention-resolved",
+      interventionId: row.id,
+      runId: row.runId,
+      status: "rejected",
+      decidedBy: body.decidedBy,
+      selfApproved,
+    })
+    return json(c, 200, { id: row.id, status: "rejected", selfApproved })
+  })
+
+  const getSessionState = async (
+    c: Context,
+    runId: string
+  ): Promise<Response> => {
+    const state = await sessionState(runId)
+    return state
+      ? json(c, 200, state)
+      : json(c, 404, {
+          error: "no live session for this run (finished runs close it)",
+        })
+  }
+  // The frontend client reads the /state suffix; the unsuffixed alias keeps
+  // the route shape the hand-rolled server answered.
+  app.get("/sessions/:runId/state", (c) =>
+    getSessionState(c, c.req.param("runId"))
+  )
+  app.get("/sessions/:runId", (c) => getSessionState(c, c.req.param("runId")))
+
+  const postSessionAction = async (
+    c: Context,
+    runId: string,
+    body: z.infer<typeof sessionActionBodySchema>
+  ): Promise<Response> => {
+    const result = await executeHumanAction(runId, body)
+    if (!result.ok) {
+      const state = await sessionState(runId)
+      return json(c, 409, { error: result.error, state })
+    }
+    return json(c, 200, {
+      detail: result.detail,
+      state: await sessionState(runId),
+    })
+  }
+  app.post("/sessions/:runId/action", sessionActionBody, (c) =>
+    postSessionAction(c, c.req.param("runId"), c.req.valid("json"))
+  )
+  app.post("/sessions/:runId", sessionActionBody, (c) =>
+    postSessionAction(c, c.req.param("runId"), c.req.valid("json"))
+  )
+
+  app.get(
+    "/ws",
+    upgradeWebSocket(() => ({
+      onOpen: (_event, ws) => {
+        wsClients.add(ws)
+        ws.send(
+          JSON.stringify({
+            type: "hello",
+            service: "engine",
+            sessions: listSessions(),
+          })
+        )
+      },
+      onMessage: (event) => {
+        // Control channel: pause / cede / resume / human-action.
+        try {
+          const text =
+            typeof event.data === "string"
+              ? event.data
+              : new TextDecoder().decode(event.data)
+          const msg = JSON.parse(text) as {
+            type: string
+            runId?: string
+            operator?: string
+            detail?: string
+          }
+          if (!msg.runId) return
+          if (msg.type === "pause") {
+            const ok = pauseSession(msg.runId)
+            broadcastControlState(msg.runId, ok)
+            return
+          }
+          if (msg.type === "cede") {
+            const ok = cedeSession(msg.runId, msg.operator ?? "operator")
+            broadcastControlState(msg.runId, ok)
+            return
+          }
+          if (msg.type === "resume") {
+            const ok = resumeSession(msg.runId, msg.operator)
+            broadcastControlState(msg.runId, ok)
+            if (ok) {
+              // Resuming answers any pending stuck intervention for this run:
+              // the operator took over and handed control back.
+              for (const intervention of listInterventions(db, "pending")) {
+                if (
+                  intervention.runId === msg.runId &&
+                  intervention.kind === "stuck"
+                ) {
+                  resolveIntervention(db, intervention.id, "resolved", {
+                    decidedBy: msg.operator ?? "operator",
+                    decisionReason:
+                      msg.detail ?? "operator returned control to automation",
+                  })
+                  broadcast({
+                    type: "intervention-resolved",
+                    interventionId: intervention.id,
+                    runId: msg.runId,
+                    status: "resolved",
+                    decidedBy: msg.operator ?? "operator",
+                  })
+                }
+              }
+            }
+            return
+          }
+          if (msg.type === "human-action" && msg.detail) {
+            recordHumanAction(msg.runId, msg.detail)
+            activeEvidence.get(msg.runId)?.logStep({
+              runId: msg.runId,
               stepIndex: -1,
               at: new Date().toISOString(),
-              action: "approval",
-              reason: `approved by ${body.decidedBy}${selfApproved ? " (self-approved — requester and decider coincide)" : ""}${body.reason ? ` — ${body.reason}` : ""}; run started`,
+              action: "human-action",
+              reason: msg.detail,
               durationMs: 0,
               result: "ok",
             })
-          }
-        }
-        broadcast({
-          type: "intervention-resolved",
-          interventionId: row.id,
-          runId: executionRunId,
-          status: "approved",
-          decidedBy: body.decidedBy,
-          selfApproved,
-        })
-        return json(res, 200, {
-          id: row.id,
-          runId: executionRunId,
-          selfApproved,
-        })
-      }
-
-      if (
-        method === "POST" &&
-        parts[0] === "approvals" &&
-        parts[2] === "reject"
-      ) {
-        const body = (await readBody(req)) as {
-          decidedBy?: string
-          reason?: string
-        }
-        if (!body.decidedBy) {
-          return json(res, 400, { error: "decidedBy is required" })
-        }
-        const row = getIntervention(db, parts[1]!)
-        if (!row) return json(res, 404, { error: "intervention not found" })
-        if (row.status !== "pending") {
-          return json(res, 409, {
-            error: `intervention is already ${row.status}`,
-          })
-        }
-        const selfApproved =
-          row.requestedBy !== null && row.requestedBy === body.decidedBy
-        resolveIntervention(db, row.id, "rejected", {
-          decidedBy: body.decidedBy,
-          decisionReason: body.reason,
-        })
-        mergeInterventionContext(db, row.id, { selfApproved })
-        // A request-first run never executes: it stops where it waited.
-        if (row.runId) {
-          const run = getRun(db, row.runId)
-          if (run && run.status === "awaiting_approval") {
-            activeEvidence.get(row.runId)?.logStep({
-              runId: row.runId,
-              stepIndex: -1,
-              at: new Date().toISOString(),
-              action: "approval",
-              reason: `rejected by ${body.decidedBy}${selfApproved ? " (self-approved — requester and decider coincide)" : ""}${body.reason ? ` — ${body.reason}` : ""}; run stopped without executing`,
-              durationMs: 0,
-              result: "skipped",
+            broadcast({
+              type: "human-action",
+              runId: msg.runId,
+              detail: msg.detail,
             })
-            setRunStatus(db, row.runId, "stopped")
-            activeEvidence.delete(row.runId)
-            const session = getSession(row.runId)
-            if (session) await closeLiveSession(row.runId)
-            broadcast({ type: "run-finished", runId: row.runId, result: null })
+            return
           }
+        } catch {
+          // Malformed WS messages are ignored; the channel stays open.
         }
-        broadcast({
-          type: "intervention-resolved",
-          interventionId: row.id,
-          runId: row.runId,
-          status: "rejected",
-          decidedBy: body.decidedBy,
-          selfApproved,
-        })
-        return json(res, 200, { id: row.id, status: "rejected", selfApproved })
-      }
+      },
+      onClose: (_event, ws) => {
+        wsClients.delete(ws)
+      },
+    }))
+  )
 
-      if (method === "GET" && parts[0] === "sessions" && parts.length === 2) {
-        const state = await sessionState(parts[1]!)
-        return state
-          ? json(res, 200, state)
-          : json(res, 404, {
-              error: "no live session for this run (finished runs close it)",
-            })
-      }
-      if (method === "POST" && parts[0] === "sessions" && parts.length === 2) {
-        const body = await readBody(req)
-        const result = await executeHumanAction(
-          parts[1]!,
-          body as Parameters<typeof executeHumanAction>[1]
-        )
-        if (!result.ok) {
-          const state = await sessionState(parts[1]!)
-          return json(res, 409, { error: result.error, state })
-        }
-        return json(res, 200, {
-          detail: result.detail,
-          state: await sessionState(parts[1]!),
-        })
-      }
-
-      return json(res, 404, { error: "not found" })
-    } catch (err) {
-      return json(res, 500, {
-        error: err instanceof Error ? err.message : String(err),
-      })
+  const wss = new WebSocketServer({ noServer: true })
+  const httpServer = serve(
+    {
+      fetch: app.fetch,
+      port: options.port,
+      websocket: { server: wss },
+    },
+    () => {
+      console.log(`engine server listening on http://localhost:${options.port}`)
     }
-  }
-
-  const httpServer = createServer((req, res) => {
-    void handleRequest(req, res)
-  })
-
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws" })
-  wss.on("connection", (socket) => {
-    wsClients.add(socket)
-    socket.send(
-      JSON.stringify({
-        type: "hello",
-        service: "engine",
-        sessions: listSessions(),
-      })
-    )
-    socket.on("message", (data) => {
-      // Control channel: pause / cede / resume / human-action.
-      try {
-        const msg = JSON.parse(data.toString()) as {
-          type: string
-          runId?: string
-          operator?: string
-          detail?: string
-        }
-        if (!msg.runId) return
-        if (msg.type === "pause") {
-          const ok = pauseSession(msg.runId)
-          broadcastControlState(msg.runId, ok)
-          return
-        }
-        if (msg.type === "cede") {
-          const ok = cedeSession(msg.runId, msg.operator ?? "operator")
-          broadcastControlState(msg.runId, ok)
-          return
-        }
-        if (msg.type === "resume") {
-          const ok = resumeSession(msg.runId, msg.operator)
-          broadcastControlState(msg.runId, ok)
-          if (ok) {
-            // Resuming answers any pending stuck intervention for this run:
-            // the operator took over and handed control back.
-            for (const intervention of listInterventions(db, "pending")) {
-              if (
-                intervention.runId === msg.runId &&
-                intervention.kind === "stuck"
-              ) {
-                resolveIntervention(db, intervention.id, "resolved", {
-                  decidedBy: msg.operator ?? "operator",
-                  decisionReason:
-                    msg.detail ?? "operator returned control to automation",
-                })
-                broadcast({
-                  type: "intervention-resolved",
-                  interventionId: intervention.id,
-                  runId: msg.runId,
-                  status: "resolved",
-                  decidedBy: msg.operator ?? "operator",
-                })
-              }
-            }
-          }
-          return
-        }
-        if (msg.type === "human-action" && msg.detail) {
-          recordHumanAction(msg.runId, msg.detail)
-          activeEvidence.get(msg.runId)?.logStep({
-            runId: msg.runId,
-            stepIndex: -1,
-            at: new Date().toISOString(),
-            action: "human-action",
-            reason: msg.detail,
-            durationMs: 0,
-            result: "ok",
-          })
-          broadcast({
-            type: "human-action",
-            runId: msg.runId,
-            detail: msg.detail,
-          })
-          return
-        }
-      } catch {
-        // Malformed WS messages are ignored; the channel stays open.
-      }
-    })
-    socket.on("close", () => wsClients.delete(socket))
-  })
-
-  httpServer.listen(options.port, () => {
-    console.log(`engine server listening on http://localhost:${options.port}`)
-  })
+  )
 
   return { httpServer, wss, getBrowser }
 }
