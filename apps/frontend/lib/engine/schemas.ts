@@ -371,7 +371,9 @@ export type EngineRun = z.infer<typeof engineRunSchema>
 export const interventionContextSchema = z.object({
   capabilityId: z.string().optional(),
   goal: z.string().optional(),
-  inputs: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+  inputs: z
+    .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+    .optional(),
   source: z.string().optional(),
   stepIndex: z.number().int().optional(),
   intent: z.string().optional(),

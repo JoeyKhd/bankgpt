@@ -279,9 +279,11 @@ export const requestEngineApproval = async (
     requestApprovalResponseSchema,
     await engineFetch("/approvals", {
       method: "POST",
-      body: JSON.stringify(requestApprovalBodySchema.merge(
-        z.object({ requestedBy: z.string() })
-      ).parse(input)),
+      body: JSON.stringify(
+        requestApprovalBodySchema
+          .merge(z.object({ requestedBy: z.string() }))
+          .parse(input)
+      ),
     }),
     "POST /approvals"
   )

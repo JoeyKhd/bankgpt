@@ -308,7 +308,10 @@ export const postSessionAction = (
   proxyFetch(
     sessionActionResponseSchema,
     `/api/engine/sessions/${encodeURIComponent(runId)}/action`,
-    { method: "POST", body: JSON.stringify(sessionActionBodySchema.parse(body)) }
+    {
+      method: "POST",
+      body: JSON.stringify(sessionActionBodySchema.parse(body)),
+    }
   )
 
 export const markCapabilityReviewed = (
