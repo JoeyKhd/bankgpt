@@ -224,7 +224,10 @@ export const runQuery = (id: string) =>
     queryFn: () => fetchRun(id),
     retry: engineRetry,
     refetchInterval: (query) =>
-      query.state.data?.status === "running" ? 2000 : false,
+      query.state.data?.status === "running" ||
+      query.state.data?.status === "awaiting_approval"
+        ? 1000
+        : false,
   })
 
 // No polling here: evidence is an append-only log, and the run queries
@@ -251,8 +254,10 @@ export const interventionQuery = (id: string) =>
     queryKey: engineKeys.intervention(id),
     queryFn: () => fetchIntervention(id),
     retry: engineRetry,
+    // Tight loop while awaiting a human decision so the caller chat's
+    // waiting card flips promptly when the operator decides.
     refetchInterval: (query) =>
-      query.state.data?.status === "pending" ? 3000 : false,
+      query.state.data?.status === "pending" ? 1000 : false,
   })
 
 /** Live session state for the take-over panel; polls while the session is

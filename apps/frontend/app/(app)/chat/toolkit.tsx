@@ -1,6 +1,7 @@
 "use generative"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { defineToolkit } from "@assistant-ui/react"
 import {
   AlertTriangleIcon,
@@ -15,12 +16,20 @@ import { z } from "zod"
 
 import type {
   Capability,
-  CapabilityRisk,
   InvokeCapabilityResult,
 } from "@/lib/capabilities-catalog"
 import { invokeStubCapability } from "@/lib/capabilities-catalog"
 import type { InvokeLiveResult } from "@/lib/engine/invoke"
-import type { EngineCapability } from "@/lib/engine"
+import { runToResult } from "@/lib/engine/invoke"
+import {
+  EngineHttpError,
+  interventionQuery,
+  isEngineOffline,
+  runQuery,
+  type EngineCapability,
+  type EngineIntervention,
+  type EngineRun,
+} from "@/lib/engine"
 
 const monoEyebrow =
   "font-mono text-xs font-medium uppercase tracking-[0.14em] text-emerald-300/80"
@@ -221,50 +230,9 @@ type InvokeResult =
   | { source: "live"; live: InvokeLiveResult }
   | { source: "stub"; stub: InvokeCapabilityResult }
 
-// Resolve the invoked capability's risk class the same way the executor
-// does: live engine catalog first, stub catalog when the engine is offline.
-// `live` records WHICH source answered — approval wording is only truthful
-// when the live engine confirmed the capability is risky, because only then
-// does the executor actually raise an approval intervention.
-const useInvocationRisk = (capabilityId: string | undefined) => {
-  // The resolution is tagged with the id it belongs to; a stale resolution
-  // for a previous id reads as unresolved, so no synchronous reset is needed.
-  const [resolution, setResolution] = useState<
-    { capabilityId: string; risk: CapabilityRisk; live: boolean } | undefined
-  >(undefined)
-  useEffect(() => {
-    if (!capabilityId) return
-    let cancelled = false
-    const resolveRisk = async () => {
-      try {
-        const { listLiveCapabilities } = await import("@/lib/engine/invoke")
-        const match = (await listLiveCapabilities()).find(
-          (capability) => capability.id === capabilityId
-        )
-        if (match) {
-          if (!cancelled)
-            setResolution({ capabilityId, risk: match.risk, live: true })
-          return
-        }
-      } catch {
-        // Engine offline — fall back to the stub catalog below.
-      }
-      const { getCapabilityRisk } = await import("@/lib/capabilities-catalog")
-      const risk = getCapabilityRisk(capabilityId)
-      if (!cancelled && risk) setResolution({ capabilityId, risk, live: false })
-    }
-    void resolveRisk()
-    return () => {
-      cancelled = true
-    }
-  }, [capabilityId])
-  return capabilityId !== undefined && resolution?.capabilityId === capabilityId
-    ? resolution
-    : undefined
-}
-
-// Neutral in-flight state. It makes NO claim about approval requests — a
-// safe invocation never raises one, and claiming otherwise is a lie.
+// Neutral in-flight state shown while the executor is on the wire. The
+// risky path returns an `approval_pending` result within a round-trip, so
+// this only covers the brief submit window.
 const RunningInvocation = ({
   capabilityId,
   inputs,
@@ -287,56 +255,297 @@ const RunningInvocation = ({
   </div>
 )
 
-const WaitingForOperator = ({
+// Terminal outcomes of a live invocation. Rendered from the settled tool
+// result — and, while an approval is in flight, straight from the live
+// intervention/run data so the card completes even when the tool call can
+// no longer be updated (see ApprovalPendingCard).
+const LiveOutcomeCard = ({
+  live,
   capabilityId,
-  inputs,
 }: {
+  live: Exclude<InvokeLiveResult, { kind: "approval_pending" }>
   capabilityId?: string
-  inputs: Record<string, unknown>
-}) => (
-  <div className="flex flex-col gap-3 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4">
-    <div className="flex items-center gap-2">
-      <Loader2Icon className="size-4 animate-spin text-amber-300" />
-      <span className="text-sm font-semibold text-amber-200">
-        Waiting for an operator to approve{" "}
-        <span className="font-mono">{capabilityId ?? "…"}</span>
+}) => {
+  if (live.kind === "success") {
+    return (
+      <div className="flex flex-col gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.05] p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <CheckCircle2Icon className="size-4 text-emerald-300" />
+          <span className="text-sm font-semibold text-emerald-200">
+            {capabilityId ?? "Capability"}
+          </span>
+          <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-1.5 py-px font-mono text-xs text-emerald-300">
+            engine
+          </span>
+        </div>
+        <OutputsTable outputs={live.outputs} />
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground/80">
+          <span>{live.stepsExecuted} steps replayed</span>
+          <span>{(live.durationMs / 1000).toFixed(1)}s</span>
+          <span>checkpoint verified</span>
+        </div>
+      </div>
+    )
+  }
+  if (live.kind === "business_outcome") {
+    return (
+      <div className="flex flex-col gap-2.5 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4">
+        <div className="flex items-center gap-2">
+          <AlertTriangleIcon className="size-4 text-amber-300" />
+          <span className="text-sm font-semibold text-amber-200">
+            Business outcome: <span className="font-mono">{live.outcome}</span>
+          </span>
+        </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {live.detail}
+        </p>
+        <div className="flex items-center gap-3 border-t border-amber-400/15 pt-2 text-[11px] text-muted-foreground/80">
+          <span>{live.stepsExecuted} steps</span>
+          <span>{(live.durationMs / 1000).toFixed(1)}s replay</span>
+        </div>
+      </div>
+    )
+  }
+  if (live.kind === "denied") {
+    return (
+      <div className="flex items-center gap-2 rounded-2xl border border-red-400/25 bg-red-400/[0.06] px-4 py-3">
+        <CircleSlashIcon className="size-4 text-red-400" />
+        <span className="text-sm text-red-300">
+          Invocation rejected by {live.decidedBy ?? "an operator"}
+          {live.decisionReason ? ` — ${live.decisionReason}` : ""}
+        </span>
+      </div>
+    )
+  }
+  if (live.kind === "engine_offline") {
+    return (
+      <div className="flex items-start gap-2.5 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4">
+        <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-amber-300" />
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-semibold text-amber-200">
+            Engine offline
+          </span>
+          <span className="text-xs leading-relaxed text-muted-foreground">
+            This capability is risky and needs operator approval, so it cannot
+            run from the stub catalog. Start the engine with{" "}
+            <code className="font-mono text-emerald-300">
+              pnpm --filter engine dev
+            </code>{" "}
+            and try again.
+          </span>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-2.5 rounded-2xl border border-red-400/25 bg-red-400/[0.06] p-4">
+      <div className="flex items-center gap-2">
+        <XCircleIcon className="size-4 shrink-0 text-red-400" />
+        <span className="text-sm font-semibold text-red-300">Hard failure</span>
+      </div>
+      <span className="text-xs leading-relaxed text-red-200/80">
+        {live.kind === "hard_failure"
+          ? `${live.expected} — observed: ${live.observed}`
+          : live.message}
       </span>
     </div>
-    <p className="text-xs leading-relaxed text-muted-foreground">
-      This capability performs a consequential action. A request is being raised
-      with your inputs in the{" "}
-      <span className="font-medium text-foreground">Interventions</span> inbox
-      (Console → Interventions), where a different operator approves or rejects
-      it. You cannot approve your own request. The run starts automatically once
-      approved — and if the request itself fails, this card is replaced by the
-      error.
-    </p>
-    {Object.keys(inputs).length > 0 && <InputsTable inputs={inputs} />}
-  </div>
-)
+  )
+}
+
+// ── Approval watch (phase two of a risky invocation) ─────────────────────
+
+// The intervention/run answer the watcher needs to decide the call.
+type ApprovalWatchState = {
+  intervention?: EngineIntervention
+  run?: EngineRun
+}
+
+// Watches a raised approval (and, once approved, its run) and completes the
+// tool call through `addResult` exactly once with the final outcome. The 1s
+// poll is the backstop; the engine's WS broadcasts (invalidated by
+// useEngineEventInvalidation, mounted on the chat page) make an operator's
+// decision land near-instantly. Because the ids come from the PERSISTED
+// tool result, this also resumes the wait after the thread is closed and
+// reopened — the missing piece when a decision lands while nobody is
+// watching.
+const useApprovalWatch = (
+  pending: Extract<InvokeLiveResult, { kind: "approval_pending" }>,
+  addResult: (result: InvokeResult) => void
+): ApprovalWatchState => {
+  // The intervention poll is a flat 1s (not the default pending-only
+  // interval) so the card recovers when the engine returns after an outage
+  // with no cached data; it lives only as long as this card does. The run
+  // poll is status-aware and stops when the run settles.
+  const intervention = useQuery({
+    ...interventionQuery(pending.interventionId),
+    refetchInterval: 1000,
+  })
+  const run = useQuery(runQuery(pending.runId))
+  // addResult must fire exactly once per tool call: after it lands, the
+  // result kind flips to a terminal one and this card unmounts.
+  const firedRef = useRef(false)
+  const complete = useCallback(
+    (live: InvokeLiveResult) => {
+      if (firedRef.current) return
+      firedRef.current = true
+      addResult({ source: "live", live })
+    },
+    [addResult]
+  )
+
+  useEffect(() => {
+    // A 404 means the engine's DB was reset under a pending request — a
+    // terminal answer. A 503 (engine down) is transient: keep waiting.
+    const gone404 = (error: unknown, isError: boolean) =>
+      isError &&
+      !isEngineOffline(error) &&
+      error instanceof EngineHttpError &&
+      error.status === 404
+    if (gone404(intervention.error, intervention.isError)) {
+      complete({
+        kind: "error",
+        message:
+          "the approval request is no longer on the engine (the database may have been reset) — invoke the capability again",
+      })
+      return
+    }
+    const decided = intervention.data
+    if (!decided || decided.status === "pending") return
+    if (decided.status === "rejected") {
+      complete({
+        kind: "denied",
+        decidedBy: decided.decidedBy,
+        decisionReason: decided.decisionReason,
+      })
+      return
+    }
+    if (decided.status !== "approved") return
+    // Approved: the engine auto-started the replay on the same run.
+    if (gone404(run.error, run.isError)) {
+      complete({
+        kind: "error",
+        message:
+          "the approved run is no longer on the engine (the database may have been reset) — invoke the capability again",
+      })
+      return
+    }
+    const finished = run.data
+    if (
+      !finished ||
+      finished.status === "running" ||
+      finished.status === "awaiting_approval"
+    ) {
+      return
+    }
+    complete(runToResult(finished))
+  }, [
+    intervention.data,
+    intervention.error,
+    intervention.isError,
+    run.data,
+    run.error,
+    run.isError,
+    complete,
+  ])
+
+  return { intervention: intervention.data, run: run.data }
+}
+
+// The pending-approval card. Phase one ended with the request raised; this
+// card owns phase two — showing the decision live and completing the call
+// with the real outcome so the model can report it.
+const ApprovalPendingCard = ({
+  pending,
+  capabilityId,
+  inputs,
+  addResult,
+}: {
+  pending: Extract<InvokeLiveResult, { kind: "approval_pending" }>
+  capabilityId?: string
+  inputs: Record<string, unknown>
+  addResult: (result: InvokeResult) => void
+}) => {
+  const { intervention, run } = useApprovalWatch(pending, addResult)
+
+  // Render terminal outcomes straight from the live data as well: the
+  // addResult above notifies the model, but it can only land while this
+  // tool call sits in the thread's last message — if the user kept chatting
+  // while waiting, the card must still complete visually.
+  if (intervention?.status === "rejected") {
+    return (
+      <LiveOutcomeCard
+        live={{
+          kind: "denied",
+          decidedBy: intervention.decidedBy,
+          decisionReason: intervention.decisionReason,
+        }}
+        capabilityId={capabilityId}
+      />
+    )
+  }
+  const runFinished =
+    run !== undefined &&
+    run.status !== "running" &&
+    run.status !== "awaiting_approval"
+  if (intervention?.status === "approved" && runFinished) {
+    return (
+      <LiveOutcomeCard live={runToResult(run)} capabilityId={capabilityId} />
+    )
+  }
+
+  return intervention?.status === "approved" ? (
+    <div className="flex flex-col gap-3 rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.06] p-4">
+      <div className="flex items-center gap-2">
+        <Loader2Icon className="size-4 animate-spin text-emerald-300" />
+        <span className="text-sm font-semibold text-emerald-200">
+          Approved — running{" "}
+          <span className="font-mono">{capabilityId ?? "…"}</span>
+        </span>
+      </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        The automation engine is replaying the recorded flow in the target
+        application. The result appears here when it finishes.
+      </p>
+      {Object.keys(inputs).length > 0 && <InputsTable inputs={inputs} />}
+    </div>
+  ) : (
+    <div className="flex flex-col gap-3 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4">
+      <div className="flex items-center gap-2">
+        <Loader2Icon className="size-4 animate-spin text-amber-300" />
+        <span className="text-sm font-semibold text-amber-200">
+          Approval required:{" "}
+          <span className="font-mono">{capabilityId ?? "…"}</span>
+        </span>
+      </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        This capability performs a consequential action, so an operator reviews
+        the request before anything runs. The inputs below were sent with it —
+        the run starts automatically once it is approved, and the result appears
+        here.
+      </p>
+      {Object.keys(inputs).length > 0 && <InputsTable inputs={inputs} />}
+    </div>
+  )
+}
 
 const InvokeCapabilityUI = ({
   args,
   result,
+  addResult,
 }: {
   args?: Partial<{
     capabilityId: string
     inputs: Record<string, unknown>
   }>
   result?: InvokeResult
+  addResult: (result: InvokeResult) => void
 }) => {
   const inputs = args?.inputs ?? {}
-  const resolution = useInvocationRisk(args?.capabilityId)
 
-  // Running: show the operator-approval card only once the LIVE engine
-  // catalog has confirmed the capability is risky — that is the one case
-  // where the executor raises a real approval intervention. Safe invocations
-  // (and anything not yet resolved) get the neutral running state instead of
-  // a false claim that an approval request exists.
+  // The executor is still on the wire (submitting the replay or raising the
+  // approval request).
   if (result === undefined) {
-    return resolution?.live && resolution.risk === "risky" ? (
-      <WaitingForOperator capabilityId={args?.capabilityId} inputs={inputs} />
-    ) : (
+    return (
       <RunningInvocation capabilityId={args?.capabilityId} inputs={inputs} />
     )
   }
@@ -344,93 +553,17 @@ const InvokeCapabilityUI = ({
   // ── Live engine outcomes ──
   if (result.source === "live") {
     const live = result.live
-    if (live.kind === "success") {
+    if (live.kind === "approval_pending") {
       return (
-        <div className="flex flex-col gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.05] p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <CheckCircle2Icon className="size-4 text-emerald-300" />
-            <span className="text-sm font-semibold text-emerald-200">
-              {args?.capabilityId ?? "Capability"}
-            </span>
-            <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-1.5 py-px font-mono text-xs text-emerald-300">
-              engine
-            </span>
-          </div>
-          <OutputsTable outputs={live.outputs} />
-          <div className="flex items-center gap-3 text-[11px] text-muted-foreground/80">
-            <span>{live.stepsExecuted} steps replayed</span>
-            <span>{(live.durationMs / 1000).toFixed(1)}s</span>
-            <span>checkpoint verified</span>
-          </div>
-        </div>
+        <ApprovalPendingCard
+          pending={live}
+          capabilityId={args?.capabilityId}
+          inputs={inputs}
+          addResult={addResult}
+        />
       )
     }
-    if (live.kind === "business_outcome") {
-      return (
-        <div className="flex flex-col gap-2.5 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4">
-          <div className="flex items-center gap-2">
-            <AlertTriangleIcon className="size-4 text-amber-300" />
-            <span className="text-sm font-semibold text-amber-200">
-              Business outcome:{" "}
-              <span className="font-mono">{live.outcome}</span>
-            </span>
-          </div>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {live.detail}
-          </p>
-          <div className="flex items-center gap-3 border-t border-amber-400/15 pt-2 text-[11px] text-muted-foreground/80">
-            <span>{live.stepsExecuted} steps</span>
-            <span>{(live.durationMs / 1000).toFixed(1)}s replay</span>
-          </div>
-        </div>
-      )
-    }
-    if (live.kind === "denied") {
-      return (
-        <div className="flex items-center gap-2 rounded-2xl border border-red-400/25 bg-red-400/[0.06] px-4 py-3">
-          <CircleSlashIcon className="size-4 text-red-400" />
-          <span className="text-sm text-red-300">
-            Invocation rejected by {live.decidedBy ?? "an operator"}
-            {live.decisionReason ? ` — ${live.decisionReason}` : ""}
-          </span>
-        </div>
-      )
-    }
-    if (live.kind === "engine_offline") {
-      return (
-        <div className="flex items-start gap-2.5 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4">
-          <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-amber-300" />
-          <div className="flex flex-col gap-1">
-            <span className="text-sm font-semibold text-amber-200">
-              Engine offline
-            </span>
-            <span className="text-xs leading-relaxed text-muted-foreground">
-              This capability is risky and needs operator approval, so it cannot
-              run from the stub catalog. Start the engine with{" "}
-              <code className="font-mono text-emerald-300">
-                pnpm --filter engine dev
-              </code>{" "}
-              and try again.
-            </span>
-          </div>
-        </div>
-      )
-    }
-    return (
-      <div className="flex items-start gap-2.5 rounded-2xl border border-red-400/25 bg-red-400/[0.06] p-4">
-        <XCircleIcon className="mt-0.5 size-4 shrink-0 text-red-400" />
-        <div className="flex flex-col gap-1">
-          <span className="text-sm font-semibold text-red-300">
-            Hard failure
-          </span>
-          <span className="text-xs leading-relaxed text-red-200/80">
-            {live.kind === "hard_failure"
-              ? `${live.expected} — observed: ${live.observed}`
-              : live.message}
-          </span>
-        </div>
-      </div>
-    )
+    return <LiveOutcomeCard live={live} capabilityId={args?.capabilityId} />
   }
 
   // ── Stub fallback (safe capabilities only, engine offline) ──
@@ -499,7 +632,9 @@ const InvokeCapabilityUI = ({
 // The invoke executor: FRONTEND tool ("use client") so it calls the
 // authenticated /api/engine proxy with the signed-in user's cookies. Risky
 // capabilities raise an approval intervention (a different operator decides
-// in /admin/interventions); safe capabilities replay straight through.
+// in /admin/interventions) and return an approval_pending marker
+// immediately — the renderer watches the decision and completes the call;
+// safe capabilities replay straight through.
 const runInvoke = async ({
   capabilityId,
   inputs,
@@ -566,7 +701,7 @@ export default defineToolkit({
   },
   invoke_capability: {
     description:
-      "Invoke a saved capability by id with its typed inputs. The automation engine replays the recorded UI flow deterministically — no model decisions — and returns a structured result: success with outputs, a known business outcome (for example member_not_found, a legitimate answer), or a hard failure. Risky capabilities raise an operator approval first; the run waits for a different operator to decide and only then executes. Ask the user for any missing required inputs before invoking.",
+      "Invoke a saved capability by id with its typed inputs. The automation engine replays the recorded UI flow deterministically — no model decisions — and returns a structured result: success with outputs, a known business outcome (for example member_not_found, a legitimate answer), a hard failure, or a rejection. Risky capabilities are gated by operator approval: invoking one raises a request that a DIFFERENT operator approves or rejects in the Interventions inbox, and the run executes automatically once approved — for those, the result reaches you only AFTER the decision (this can take a while; report the outcome you actually receive). Ask the user for any missing required inputs before invoking.",
     parameters: z.object({
       capabilityId: z
         .string()

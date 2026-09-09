@@ -1,29 +1,37 @@
 /**
- * Live capability invocation for the caller chat (D-046 segregation swap).
+ * Live capability invocation for the caller chat (D-046 segregation swap,
+ * two-phase approval flow from D-056).
  *
  * `invoke_capability` is a FRONTEND tool: its executor runs in the browser
  * and calls the authenticated /api/engine proxy. This module owns the
  * end-to-end flow:
  *
  * - SAFE capability: start a replay and poll the run to its structured
- *   result (success outputs | business outcome | hard failure).
+ *   result (success outputs | business outcome | hard failure). The wait is
+ *   seconds, so the executor holds the tool call open.
  * - RISKY capability: raise an APPROVAL intervention (requestedBy = the
- *   signed-in chat user, attached by the proxy). The run is NOT executed —
- *   it waits as "awaiting_approval" for a DIFFERENT operator in
- *   /admin/interventions. This executor then polls the intervention until
- *   the operator decides; approval auto-runs the replay, rejection returns
- *   the denial. The chat user can never self-approve: the decision is a
- *   separate authenticated operator action.
+ *   signed-in chat user, attached by the proxy) and return IMMEDIATELY with
+ *   an `approval_pending` marker carrying the intervention + run ids. The
+ *   run is NOT executed — it waits as "awaiting_approval" for a DIFFERENT
+ *   operator in /admin/interventions.
+ *
+ * The risky path must not hold the tool call open: while a frontend tool
+ * awaits, the chat never settles, so nothing persists and a closed tab
+ * loses the exchange. Returning `approval_pending` lets the turn complete
+ * and persist; the tool-call renderer then watches the intervention and
+ * completes the call with `addResult` once the operator decides (approval
+ * auto-runs the replay, rejection returns the denial) — even after the user
+ * closed and reopened the thread, because the persisted marker carries the
+ * ids. The chat user can never self-approve: the decision is a separate
+ * authenticated operator action.
  */
 import {
   engineCapabilitySchema,
-  engineInterventionSchema,
   engineRunSchema,
   requestApprovalBodySchema,
   requestApprovalResponseSchema,
   startRunResponseSchema,
   type EngineCapability,
-  type EngineIntervention,
   type EngineRun,
   type RequestApprovalBody,
   type ReplayRequest,
@@ -88,12 +96,6 @@ const startReplay = (input: ReplayRequest): Promise<{ runId: string }> =>
 const getRun = (id: string): Promise<EngineRun> =>
   call(engineRunSchema, `/api/engine/runs/${encodeURIComponent(id)}`)
 
-const getIntervention = (id: string): Promise<EngineIntervention> =>
-  call(
-    engineInterventionSchema,
-    `/api/engine/approvals/${encodeURIComponent(id)}`
-  )
-
 const requestApproval = (
   input: RequestApprovalBody
 ): Promise<{ id: string; runId: string }> =>
@@ -108,10 +110,12 @@ const getCapabilityDetail = (id: string): Promise<EngineCapability> =>
     `/api/engine/capabilities/${encodeURIComponent(id)}`
   )
 
-/** Poll a run until it leaves the in-flight states. */
+/** Poll a run until it leaves the in-flight states. Only used for SAFE
+ * capabilities (seconds); risky ones return `approval_pending` immediately
+ * and let the tool-call renderer watch the decision. */
 const waitForRun = async (
   runId: string,
-  intervalMs = 2000,
+  intervalMs = 1000,
   timeoutMs = 180_000
 ): Promise<EngineRun> => {
   const start = Date.now()
@@ -121,21 +125,6 @@ const waitForRun = async (
       return run
     }
     if (Date.now() - start > timeoutMs) return run
-    await sleep(intervalMs)
-  }
-}
-
-/** Poll an intervention until an operator decides. */
-const waitForDecision = async (
-  interventionId: string,
-  intervalMs = 2500,
-  timeoutMs = 30 * 60_000
-): Promise<EngineIntervention> => {
-  const start = Date.now()
-  for (;;) {
-    const intervention = await getIntervention(interventionId)
-    if (intervention.status !== "pending") return intervention
-    if (Date.now() - start > timeoutMs) return intervention
     await sleep(intervalMs)
   }
 }
@@ -155,6 +144,16 @@ export type InvokeLiveResult =
       stepsExecuted: number
       durationMs: number
     }
+  | {
+      // Risky invocation, phase one: the approval request is raised and the
+      // run waits as awaiting_approval. NOT a terminal state — the renderer
+      // watches the intervention and completes the call with the real
+      // outcome once the operator decides. The ids make the wait resumable
+      // after a page reload.
+      kind: "approval_pending"
+      interventionId: string
+      runId: string
+    }
   | { kind: "hard_failure"; expected: string; observed: string }
   | { kind: "denied"; decidedBy: string | null; decisionReason: string | null }
   | { kind: "engine_offline" }
@@ -171,27 +170,21 @@ export const invokeLiveCapability = async (params: {
 }): Promise<InvokeLiveResult> => {
   try {
     if (params.risky) {
-      // 1. Raise the operator-decidable approval. The run waits.
+      // Raise the operator-decidable approval and return IMMEDIATELY: the
+      // run waits as awaiting_approval for a DIFFERENT operator in
+      // /admin/interventions. Holding the tool call open while waiting
+      // would block persistence and die with the tab — the renderer watches
+      // the decision and completes the call (see the module docstring).
       const approval = await requestApproval({
         capabilityId: params.capabilityId,
         inputs: params.inputs,
         reason: "Invoked from the caller chat by a signed-in user",
       })
-      // 2. Wait for a DIFFERENT operator to decide in /admin/interventions.
-      const decided = await waitForDecision(approval.id)
-      if (decided.status === "rejected") {
-        return {
-          kind: "denied",
-          decidedBy: decided.decidedBy,
-          decisionReason: decided.decisionReason,
-        }
+      return {
+        kind: "approval_pending",
+        interventionId: approval.id,
+        runId: approval.runId,
       }
-      if (decided.status === "pending") {
-        return { kind: "error", message: "no operator answered in time" }
-      }
-      // 3. Approved: the engine auto-started the replay on the same run.
-      const run = await waitForRun(decided.runId ?? approval.runId)
-      return runToResult(run)
     }
     // Safe capability: run straight through.
     const started = await startReplay({
@@ -209,9 +202,19 @@ export const invokeLiveCapability = async (params: {
   }
 }
 
-const runToResult = (run: EngineRun): InvokeLiveResult => {
+// Exported for the toolkit's approval watcher: phase two of a risky
+// invocation converts the finished run into the same terminal union (never
+// approval_pending — a finished run is a terminal answer).
+export const runToResult = (
+  run: EngineRun
+): Exclude<InvokeLiveResult, { kind: "approval_pending" }> => {
   const result = run.result
-  if (!result) return { kind: "error", message: `run is still ${run.status}` }
+  if (!result) {
+    return {
+      kind: "error",
+      message: `run ended without a result (status: ${run.status})`,
+    }
+  }
   switch (result.status) {
     case "success":
       // Replay success carries outputs; a discovery success carries a goal.

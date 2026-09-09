@@ -48,6 +48,7 @@ export {
   startDiscovery,
   startReplay,
 } from "./queries"
+export { useEngineEventInvalidation } from "./use-engine-event-invalidation"
 export {
   connectEngineControl,
   ENGINE_WS_URL,

@@ -9,7 +9,7 @@ import {
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react"
 import { useChatRuntime } from "@assistant-ui/ai-sdk"
-import { lastAssistantMessageIsCompleteWithToolCalls } from "ai"
+import { lastAssistantMessageIsCompleteWithToolCalls, type UIMessage } from "ai"
 import { LayoutDashboardIcon } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -29,6 +29,7 @@ import {
 import { CHAT_MODELS, DEFAULT_CHAT_MODEL_ID } from "@/lib/chat-models"
 import { threadListAdapter } from "@/lib/thread-list-adapter"
 import { createDictationAdapter } from "@/lib/dictation"
+import { useEngineEventInvalidation } from "@/lib/engine"
 import { useMounted } from "@/hooks/use-mounted"
 
 import toolkit from "./toolkit"
@@ -127,16 +128,45 @@ const Welcome = () => (
   </div>
 )
 
+// The invoke tool's phase-one marker shape — see lib/engine/invoke.ts.
+const isApprovalPendingOutput = (output: unknown): boolean => {
+  if (typeof output !== "object" || output === null) return false
+  const result = output as { source?: unknown; live?: { kind?: unknown } }
+  return result.source === "live" && result.live?.kind === "approval_pending"
+}
+
+// Hold the turn while an invoke_capability result is the approval_pending
+// marker: the request is raised, not finished, and the approval card
+// completes the call (addResult) with the real outcome once the operator
+// decides. Auto-sending on the marker would add a throwaway "waiting"
+// reply whose step-start boundary then BLOCKS the outcome's auto-send.
+const sendAutomaticallyWhen = ({ messages }: { messages: UIMessage[] }) => {
+  if (!lastAssistantMessageIsCompleteWithToolCalls({ messages })) return false
+  return !messages
+    .at(-1)
+    ?.parts.some(
+      (part) =>
+        part.type === "tool-invoke_capability" &&
+        part.state === "output-available" &&
+        isApprovalPendingOutput(part.output)
+    )
+}
+
 export const ChatClient = () => {
+  // Engine lifecycle broadcasts (intervention raised/decided, run finished)
+  // invalidate the matching queries — the approval card flips the moment an
+  // operator decides instead of waiting for the next poll.
+  useEngineEventInvalidation()
   const runtime = useRemoteThreadListRuntime({
     adapter: threadListAdapter,
     runtimeHook: function useChatThreadRuntime() {
       // The approval gate was removed (D-046: segregated operator approval
       // inside the invoke tool, never the requester), so auto-send after any
       // completed tool call — frontend tool results must round-trip to the
-      // model without a manual nudge.
+      // model without a manual nudge. The one exception is the invoke
+      // tool's approval_pending marker (D-056 two-phase approvals).
       return useChatRuntime({
-        sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+        sendAutomaticallyWhen,
         adapters: { dictation: createDictationAdapter() },
       })
     },
