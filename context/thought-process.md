@@ -1144,3 +1144,31 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   tokens remain unscoped per run server-side. Both recorded as REPORT cuts.
 - **References:** `/evidence/README.md`, `apps/engine/NOTES.md`; D-039,
   D-042, D-043.
+
+### D-046 — 2026-09-09T00:17:08Z — Admin console surfaces live on the engine data layer
+
+- **Status:** accepted (implements D-024; consumes D-044)
+- **Decision/change:** Replaced the four PageStub surfaces with live,
+  engine-backed pages. Mounted a `QueryClientProvider`
+  (`components/admin/engine-providers.tsx`) in the admin layout; shared
+  query states/pills/formatters in `components/admin/engine-ui.tsx`.
+  `/admin/capabilities` — deduped list + `/admin/capabilities/[id]` detail
+  (ordered steps with primary locator + fallbacks + robustness, typed
+  inputs/outputs, checkpoint, businessOutcomes, Mark-reviewed, and a
+  zod-validated `@tanstack/react-form` Replay form). `/admin/runs` — live
+  run history (polls while running) + `/admin/runs/[id]` detail (structured
+  result per status, step evidence). `/admin/discover` — zod-validated
+  start-discovery form embedding the new run's live progress. All pages
+  render loading skeletons, an amber engine-offline banner, and empty
+  states. `/admin/interventions` and the chat stub left for the
+  live-session worker.
+- **Why:** The console is where operators and reviewers work (D-024); these
+  pages make the engine's capabilities, runs, and evidence inspectable.
+- **Consequences/follow-up:** Known gaps for later: capability list rows
+  carry no artifact (enriched per card via `useQueries`); no
+  evidence-binary endpoint (failure screenshots shown as a path hint — add
+  a GET evidence-file route if the demo needs them); runs list unsorted
+  (sorted client-side). Evidence streaming reuses run-row polling +
+  evidence refetch (interim until the WS live-session UI lands).
+- **References:** `apps/frontend/app/(app)/admin/`,
+  `apps/frontend/lib/engine/NOTES.md`; D-024, D-044, D-045.
