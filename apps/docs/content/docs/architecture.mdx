@@ -1,0 +1,66 @@
+---
+title: Architecture
+description: Three processes with explicit boundaries — engine, frontend, mockbank — and the discovery → artifact → replay loop.
+---
+
+The system is three processes with explicit boundaries, plus this docs site:
+
+- **`apps/engine`** — the automation service and the graded core. It owns
+  the discovery loop, the artifact schema, deterministic replay, policy and
+  redaction, the approvals store, and the live-session control model. It
+  exposes a Hono HTTP API plus a WebSocket control channel on one listener
+  (port `4011`), validates every body with zod, redacts every JSON
+  response, and persists capabilities/runs/interventions in SQLite
+  (better-sqlite3, WAL).
+- **`apps/frontend`** — the operator surface (port `3000`). A Next.js 16
+  (React 19) app with the `/admin` console (capabilities, runs, discovery,
+  interventions inbox with a live take-over panel) and a `/chat` caller
+  simulation that invokes capabilities by name with typed inputs. The
+  frontend never calls the engine from the browser over HTTP: a server-only
+  typed client sits behind auth-gated `/api/engine/*` proxies, and the
+  browser connects to the engine's `/ws` control channel directly.
+- **`apps/mockbank`** — FinCore Teller (port `4010`), a zero-dependency
+  `node:http` mock back-office console and the proxy target. It is
+  deliberately hostile: legacy table markup with no ids or test IDs, random
+  latency, a transient HTTP 500 every 7th authenticated GET, 5-minute
+  session expiry, and a native `window.confirm` gating the risky submit.
+
+## Why these boundaries
+
+- **Separate engine process.** Long-running browser automation and human
+  handoff cannot be tied to web request lifecycles; a service keeps the
+  pause/cede/resume control channel explicit.
+- **HTTP API + WebSocket control channel, not shared-DB polling.** Handoff
+  requires live bidirectional control of one running session; polling a
+  shared SQLite cannot express ownership transfer.
+- **Accessibility-tree-first computer use.** Discovery observes
+  `page.ariaSnapshot()` (the YAML accessibility tree) plus a screenshot,
+  decides with one structured call per step (AI SDK `generateText` with
+  `Output.object` against a fixed zod action vocabulary), and acts through
+  Playwright `getByRole`. The a11y tree is more stable than markup and
+  exists on legacy web and desktop surfaces alike; screenshots keep
+  situational awareness without ever recording coordinates.
+- **One model, used sparingly.** Discovery and distillation run on
+  `google/gemini-2.5-flash` via OpenRouter: one structured call per
+  discovery step, one more to distill, zero on replay.
+
+## The pipeline
+
+```
+goal → discovery (model in the loop) → artifact (typed contract)
+     → replay (no model) → structured result
+```
+
+1. **Discovery** — the model drives a live Chromium toward a natural-
+  language goal, one structured action per step, until the goal state is
+  reached.
+2. **Distillation** — the successful trajectory is distilled into a typed,
+  versioned capability artifact (see [Capabilities](/docs/capabilities)).
+3. **Replay** — the engine executes the artifact's ordered steps against
+  the live app with zero model calls, asserting a machine-checkable
+  checkpoint at the end and returning typed outputs, a known business
+  outcome, or a debuggable failure.
+
+Policy is enforced and evidence is captured at every step: risky actions
+raise segregated operator approvals, and a human can take over the same
+live session mid-run and hand control back.

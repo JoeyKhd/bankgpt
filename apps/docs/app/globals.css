@@ -1,0 +1,95 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+/*
+ * BankGPT brand theme — dark-only. Token values come from
+ * context/design/tokens.json (extracted from https://bankgpt.ai/).
+ * The Fumadocs neutral preset is fully overridden: the light `@theme`
+ * values are replaced with the brand's dark palette so the site renders
+ * dark even before next-themes applies the forced `dark` class.
+ */
+@theme {
+  /* --bg */
+  --color-fd-background: #09090b;
+  /* --text */
+  --color-fd-foreground: #fafafa;
+  /* --bg-elevated */
+  --color-fd-muted: #0f0f12;
+  /* --text-dim */
+  --color-fd-muted-foreground: #a1a1aa;
+  --color-fd-popover: #0f0f12;
+  --color-fd-popover-foreground: #fafafa;
+  /* --bg-card */
+  --color-fd-card: #131316;
+  --color-fd-card-foreground: #fafafa;
+  /* --border: white at 6% */
+  --color-fd-border: rgb(255 255 255 / 0.06);
+  /* --emerald-bright, the brand accent */
+  --color-fd-primary: #10b981;
+  /* brand on-accent: deep green, never white */
+  --color-fd-primary-foreground: #042f23;
+  --color-fd-secondary: #131316;
+  --color-fd-secondary-foreground: #fafafa;
+  /* indigo glow at 18% as the hover/accent surface */
+  --color-fd-accent: rgb(99 102 241 / 0.18);
+  /* --indigo-bright */
+  --color-fd-accent-foreground: #818cf8;
+  --color-fd-ring: #10b981;
+  --color-fd-overlay: rgb(0 0 0 / 0.6);
+  --color-fd-success: #10b981;
+}
+
+/* Same palette under .dark so the forced dark class matches :root. */
+.dark {
+  --color-fd-background: #09090b;
+  --color-fd-foreground: #fafafa;
+  --color-fd-muted: #0f0f12;
+  --color-fd-muted-foreground: #a1a1aa;
+  --color-fd-popover: #0f0f12;
+  --color-fd-popover-foreground: #fafafa;
+  --color-fd-card: #131316;
+  --color-fd-card-foreground: #fafafa;
+  --color-fd-border: rgb(255 255 255 / 0.06);
+  --color-fd-primary: #10b981;
+  --color-fd-primary-foreground: #042f23;
+  --color-fd-secondary: #131316;
+  --color-fd-secondary-foreground: #fafafa;
+  --color-fd-accent: rgb(99 102 241 / 0.18);
+  --color-fd-accent-foreground: #818cf8;
+  --color-fd-ring: #10b981;
+  --color-fd-overlay: rgb(0 0 0 / 0.6);
+}
+
+/* Re-map the neutral preset's sidebar-specific overrides to brand values. */
+.dark #nd-sidebar {
+  --color-fd-muted: #131316;
+  --color-fd-secondary: #0f0f12;
+  --color-fd-muted-foreground: #a1a1aa;
+}
+
+html {
+  color-scheme: dark;
+  scrollbar-gutter: stable;
+}
+
+body {
+  /* Inter disambiguation + stylistic alternates, per brand tokens */
+  font-feature-settings:
+    "cv02",
+    "cv03",
+    "cv04",
+    "cv11";
+}
+
+/* Signature gradient text: 105deg indigo -> violet 42% -> emerald. */
+.text-brand-gradient {
+  background-image: linear-gradient(
+    105deg,
+    #6366f1 0%,
+    #8b5cf6 42%,
+    #10b981 100%
+  );
+  background-clip: text;
+  color: transparent;
+}

@@ -1,0 +1,51 @@
+---
+title: Introduction
+description: Computer-use automation for back-office banking apps — discovery once, deterministic replay forever.
+---
+
+BankGPT is the backend integration layer that gives an AI agent **hands**
+inside applications with no API.
+
+An LLM **discovers** a back-office UI flow once — driving a real browser,
+observing the accessibility tree, one structured model call per step — and
+the successful run is distilled into a typed, versioned **capability
+artifact**. From then on the flow **replays deterministically with zero
+model calls**: a calling AI agent invokes the capability with typed inputs
+and gets back typed outputs, a known business outcome, or a debuggable
+failure. Human operators approve risky actions (with maker ≠ checker
+segregation) and can take over the **same live session** when automation
+gets stuck, then hand control back.
+
+The through-line:
+
+```
+goal → discovery (model in the loop) → artifact (typed contract)
+     → replay (no model) → structured result
+```
+
+with policy enforced and evidence captured at every step.
+
+## The system at a glance
+
+| App             | Role                                                                                     | Port |
+| --------------- | ---------------------------------------------------------------------------------------- | ---- |
+| `apps/frontend` | Operator console (`/admin`) + caller simulation (`/chat`). Next.js 16, React 19.         | 3000 |
+| `apps/engine`   | Automation service: discovery loop, artifacts, replay, approvals, live handoff.          | 4011 |
+| `apps/mockbank` | FinCore Teller — the deliberately hostile mock banking console used as the proxy target. | 4010 |
+| `apps/docs`     | This documentation site (Fumadocs).                                                      | 3001 |
+
+## Where to next
+
+<Cards>
+  <Card title="Running locally" href="/docs/running-locally">
+    One command starts the whole demo — install, environment, and ports.
+  </Card>
+  <Card title="Architecture" href="/docs/architecture">
+    Three processes with explicit boundaries and the discovery → artifact →
+    replay loop.
+  </Card>
+  <Card title="Capabilities" href="/docs/capabilities">
+    The artifact contract and the review/approval gate that guards risky
+    actions.
+  </Card>
+</Cards>

@@ -1,0 +1,82 @@
+---
+title: Running locally
+description: Install, configure, and run the whole BankGPT automation demo with one command.
+---
+
+Requirements: **Node 22+** and **pnpm 10** (`packageManager` is pinned in
+the root `package.json`).
+
+## Install
+
+Run everything from the **repo root** — this is a pnpm workspace, never
+install inside an app:
+
+```bash
+pnpm install                                          # from the repo root
+pnpm --filter engine exec playwright install chromium # one-time browser download
+```
+
+## Environment
+
+- **`OPENROUTER_API_KEY`** — the one external-service key. Needed for
+  discovery (the engine's model calls) and for the `/chat` caller
+  simulation. Put it in **`apps/engine/.env.local`** (copy
+  `apps/engine/.env.example`) and/or **`apps/frontend/.env.local`** (copy
+  `apps/frontend/.env.example`). Replay never needs it.
+- **`BETTER_AUTH_SECRET`** — required by the frontend for auth
+  (`apps/frontend/.env.local`); generate locally with
+  `openssl rand -base64 32`.
+
+Optional variables all have working defaults: `ENGINE_PORT` (4011),
+`ENGINE_DB_PATH` (engine); `ENGINE_URL` (`http://127.0.0.1:4011`) and
+`NEXT_PUBLIC_ENGINE_WS_URL` (`ws://127.0.0.1:4011/ws`) for the frontend →
+engine wiring.
+
+<Callout title="First run only">
+  The frontend's auth schema must exist before sign-in works. If
+  `apps/frontend/data/app.sqlite` does not exist yet, create it once:
+
+  ```bash
+  cd apps/frontend && pnpm dlx @better-auth/cli@latest migrate --config lib/auth.ts
+  ```
+</Callout>
+
+## Run
+
+One command starts the whole demo in parallel:
+
+```bash
+pnpm dev   # mockbank :4010 + engine :4011 + frontend :3000 + docs :3001
+```
+
+Open `http://localhost:3000` and register — **the first registered user is
+the admin**. `/chat` is the caller simulation; `/admin` holds the
+capability catalog, run history, discovery form, and the interventions
+inbox with the live take-over panel. This docs site is at
+`http://localhost:3001`.
+
+If you ever need one service on its own, use the per-app scripts
+(`pnpm --filter engine dev`, …) — but then do not also run `pnpm dev`, or
+the ports collide.
+
+## The CLI demo path (discover → replay)
+
+The graded demo needs only the mockbank and the engine CLI. Reset the
+target first so counters and the transient-500 cadence are deterministic:
+
+```bash
+curl -X POST http://127.0.0.1:4010/__reset__
+
+# 1. Genuine LLM-driven discovery (needs OPENROUTER_API_KEY)
+pnpm --filter engine discover   --goal "Log in to the teller console and read member 100231's savings and checking balances"   --target http://127.0.0.1:4010
+
+# 2. Deterministic replay (ZERO model calls; no API key needed)
+pnpm --filter engine replay --capability get_member_balances --input memberId=100231
+```
+
+Each `discover` prints the returned artifact id (`savedArtifactId`).
+Freshly distilled artifacts are `reviewed: false`; risky capabilities only
+replay after a human review pass marks them `reviewed: true` (safe
+capabilities replay unreviewed). Artifacts and run evidence are stored in
+the engine's SQLite DB (`apps/engine/data/engine.sqlite`) — see
+[Capabilities](./capabilities).

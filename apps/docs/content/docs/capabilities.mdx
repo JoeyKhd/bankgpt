@@ -1,0 +1,59 @@
+---
+title: Capabilities & artifacts
+description: The typed capability artifact is the contract between the discovery model, the human reviewer, the replay executor, and the calling agent.
+---
+
+The artifact (`apps/engine/src/artifact.ts`) is the center of the design.
+All validation is zod, every type is `z.infer`, and no replay code is
+capability-specific — a capability reads like a function signature, because
+that is how the calling agent treats it.
+
+## What an artifact contains
+
+- **Identity and provenance** — stable `id`, semver `version`, `goal`,
+  `targetApp`, `risk` (`safe` | `risky`), `createdAt`, plus
+  `discoveryModel` and `discoveryRunId` so every artifact audits back to a
+  genuine discovery run.
+- **Typed I/O** — `inputs` (string/number/boolean/enum with allowed values,
+  required flags, descriptions) and `outputs`.
+- **Ordered steps** from a fixed action vocabulary (`navigate`, `click`,
+  `type`, `select`, `press`, `wait`, `extract`), each with a
+  reviewer-facing `intent`, `{{input}}` placeholder substitution, and an
+  optional per-step checkpoint. `extract` steps fill declared outputs.
+- **Strategy-tagged locators with fallbacks.** Every step target records a
+  primary `a11y` locator (role + accessible name) and ordered fallbacks
+  (`css`, `text`) with a human-readable `robustness` note. The locator
+  schema is a strict discriminated union on `strategy`. Pixel coordinates
+  are never recorded — they do not survive restyling.
+- **A machine-checkable checkpoint** (URL regex and/or visible text and/or
+  a required element) asserted at the end of replay, so the run proves it
+  arrived instead of assuming the last click worked.
+- **A `businessOutcomes` detect table** — named, expected outcomes
+  (`member_not_found`, `invalid_input`, `session_expired`) with URL/text
+  detect rules, so "no such member" is a legitimate answer the caller
+  branches on, not a crash.
+
+## The review gate
+
+Discovery stamps artifacts `1.0.0` with `reviewed: false`. A documented
+human review pass fixes the distiller's first-draft semantics (the
+distiller is a good drafter, not a finisher) before `reviewed: true` and a
+version bump.
+
+- **Safe** capabilities replay unreviewed.
+- **Risky** capabilities refuse to replay until the artifact is
+  `reviewed: true`, and server-invoked risky runs raise an **operator
+  approval** with maker ≠ checker segregation — the operator who requested
+  the run cannot approve it.
+
+## Handoff when automation gets stuck
+
+If replay stalls, a human operator takes over the **same live session**
+through the interventions inbox, acts in the browser directly, and hands
+control back to the automation. Ownership transfer is explicit over the
+engine's WebSocket control channel — the artifact keeps no hidden state.
+
+Artifacts live in the engine's `capabilities` table; every discovery and
+replay run's step log, transcript, and failure/handoff screenshots are
+stored as blobs in the engine SQLite DB (`run_files` table) and served over
+the engine HTTP API at `/runs/:id/evidence` and `/runs/:id/files[/:name]`.
