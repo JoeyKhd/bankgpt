@@ -116,9 +116,9 @@ const InputsTable = ({ inputs }: { inputs: Record<string, unknown> }) => (
 // ── Approval decision card ───────────────────────────────────────────────
 
 // The segregation rule: whoever REQUESTED the approval is surfaced, and the
-// decider is always the signed-in operator. When the same account does both
-// (single-account demo) the decision is still recorded — the engine flags it
-// selfApproved — because the demo cannot prove two humans apart.
+// decider is always the signed-in operator. If the same account does both,
+// the engine still records the decision and flags it selfApproved in the
+// evidence.
 const ApprovalCard = ({
   intervention,
   sessionEmail,
@@ -152,8 +152,6 @@ const ApprovalCard = ({
       setError(failure instanceof Error ? failure.message : String(failure)),
   })
 
-  const selfRequested =
-    sessionEmail !== undefined && intervention.requestedBy === sessionEmail
   const inputs = (intervention.context.inputs ?? {}) as Record<string, unknown>
 
   return (
@@ -211,15 +209,6 @@ const ApprovalCard = ({
       </div>
 
       {Object.keys(inputs).length > 0 && <InputsTable inputs={inputs} />}
-
-      {selfRequested && (
-        <p className="rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-xs leading-relaxed text-amber-200/90">
-          You raised this request yourself. In production a different operator
-          decides; here the demo account can still answer — the decision is
-          recorded as <span className="font-mono">selfApproved</span> in the
-          evidence instead of being hidden.
-        </p>
-      )}
 
       <Input
         value={reason}
@@ -769,13 +758,7 @@ export const InterventionsInbox = () => {
           When automation is stuck or needs a human decision, it raises a
           request here. Approvals are decided by a DIFFERENT operator than the
           requester; stuck runs hand you the same live session to fix and
-          return.
-          {pending.length > 0 && (
-            <span className="text-sky-300">
-              {" "}
-              Polling every 3s while requests are open.
-            </span>
-          )}
+          return. New requests appear automatically.
         </p>
       </div>
 

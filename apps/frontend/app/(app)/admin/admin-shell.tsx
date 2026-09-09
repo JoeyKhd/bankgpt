@@ -1,5 +1,6 @@
 "use client"
 
+import { useQuery } from "@tanstack/react-query"
 import {
   BotIcon,
   ClipboardListIcon,
@@ -17,6 +18,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 
 import { authClient } from "@/lib/auth-client"
+import { interventionsQuery, useEngineEventInvalidation } from "@/lib/engine"
 import { cn } from "@/lib/utils"
 
 type NavItem = {
@@ -66,6 +68,25 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   },
 ]
 
+// Live count of requests awaiting a human decision, shown on the
+// Interventions nav item. The query is shared with the inbox page's cache;
+// the refetch interval on interventionsQuery keeps it fresh from anywhere
+// in the console, and the engine's WS broadcasts make it near-instant.
+const PendingInterventionsBadge = () => {
+  const interventions = useQuery(interventionsQuery())
+  const pending =
+    interventions.data?.filter((i) => i.status === "pending").length ?? 0
+  if (pending === 0) return null
+  return (
+    <span
+      className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full border border-amber-400/25 bg-amber-400/10 px-1.5 py-px text-xs font-medium text-amber-300"
+      aria-label={`${pending} pending interventions`}
+    >
+      {pending}
+    </span>
+  )
+}
+
 const SignOutButton = () => {
   const router = useRouter()
   return (
@@ -87,6 +108,9 @@ export const AdminShell = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname()
   const { data: session } = authClient.useSession()
   const isAdmin = session?.user.role === "admin"
+  // Engine lifecycle broadcasts → instant query invalidation for the badge
+  // and every console page, without waiting for the next poll.
+  useEngineEventInvalidation()
 
   return (
     <div className="flex min-h-dvh">
@@ -131,6 +155,9 @@ export const AdminShell = ({ children }: { children: React.ReactNode }) => {
                     >
                       <item.icon className="size-4" />
                       {item.label}
+                      {item.href === "/admin/interventions" && (
+                        <PendingInterventionsBadge />
+                      )}
                     </Link>
                   )
                 })}

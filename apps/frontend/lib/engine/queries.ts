@@ -244,9 +244,12 @@ export const interventionsQuery = () =>
     queryKey: engineKeys.interventions(),
     queryFn: fetchInterventions,
     retry: engineRetry,
-    // Keep the inbox fresh while anything awaits a human decision.
-    refetchInterval: (query) =>
-      query.state.data?.some((i) => i.status === "pending") ? 3000 : false,
+    // Always poll, not only while a pending row is already cached: new
+    // requests raised from the caller chat (or the engine) must surface in
+    // the inbox and the sidebar badge without a manual refresh. The WS
+    // control channel (useEngineEventInvalidation) makes them near-instant;
+    // this is the backstop.
+    refetchInterval: 3000,
   })
 
 export const interventionQuery = (id: string) =>
