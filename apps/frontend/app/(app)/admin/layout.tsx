@@ -1,5 +1,7 @@
 import type { Metadata } from "next"
 
+import { EngineProviders } from "@/components/admin/engine-providers"
+
 import { AdminShell } from "./admin-shell"
 
 export const metadata: Metadata = {
@@ -11,5 +13,9 @@ export default function AdminLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  return <AdminShell>{children}</AdminShell>
+  return (
+    <EngineProviders>
+      <AdminShell>{children}</AdminShell>
+    </EngineProviders>
+  )
 }
