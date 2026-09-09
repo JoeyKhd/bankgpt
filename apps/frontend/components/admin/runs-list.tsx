@@ -15,6 +15,7 @@ import {
   runDuration,
 } from "@/components/admin/engine-ui"
 import { engineErrorMessage, isEngineOffline, runsQuery } from "@/lib/engine"
+import { cn } from "@/lib/utils"
 
 export const RunsList = () => {
   const runs = useQuery(runsQuery())
@@ -61,22 +62,26 @@ export const RunsList = () => {
 
       {sorted.length > 0 && (
         <div className="overflow-hidden rounded-2xl border border-white/8">
-          <div className="grid grid-cols-[auto_auto_1fr_auto_auto] items-center gap-4 border-b border-white/8 bg-white/[0.02] px-4 py-2.5">
-            <span className={monoEyebrow}>Status</span>
-            <span className={monoEyebrow}>Kind</span>
-            <span className={monoEyebrow}>Run</span>
-            <span className={monoEyebrow}>Started</span>
-            <span className={monoEyebrow}>Duration</span>
+          <div className="grid grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_9.5rem_6rem] items-center gap-4 border-b border-white/8 bg-white/[0.02] px-4 py-2.5">
+            <span className={cn(monoEyebrow, "text-left")}>Status</span>
+            <span className={cn(monoEyebrow, "text-center")}>Kind</span>
+            <span className={cn(monoEyebrow, "text-left")}>Run</span>
+            <span className={cn(monoEyebrow, "text-right")}>Started</span>
+            <span className={cn(monoEyebrow, "text-right")}>Duration</span>
           </div>
           {sorted.map((run) => (
             <Link
               key={run.id}
               href={`/admin/runs/${encodeURIComponent(run.id)}`}
-              className="grid grid-cols-[auto_auto_1fr_auto_auto] items-center gap-4 border-b border-white/6 px-4 py-3 transition-colors last:border-0 hover:bg-white/[0.03]"
+              className="grid grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_9.5rem_6rem] items-center gap-4 border-b border-white/6 px-4 py-3 transition-colors last:border-0 hover:bg-white/[0.03]"
             >
-              <RunStatusPill status={run.status} />
-              <KindPill kind={run.kind} />
-              <div className="flex min-w-0 flex-col">
+              <div className="flex justify-start">
+                <RunStatusPill status={run.status} />
+              </div>
+              <div className="flex justify-center">
+                <KindPill kind={run.kind} />
+              </div>
+              <div className="flex min-w-0 flex-col items-start">
                 {run.kind === "replay" && run.capabilityId ? (
                   <span className="truncate font-mono text-sm">
                     {run.capabilityId}
@@ -88,10 +93,10 @@ export const RunsList = () => {
                   {run.id}
                 </span>
               </div>
-              <span className="text-xs whitespace-nowrap text-muted-foreground">
+              <span className="text-right text-xs whitespace-nowrap text-muted-foreground">
                 {formatDateTime(run.startedAt)}
               </span>
-              <span className="text-xs whitespace-nowrap text-muted-foreground">
+              <span className="text-right text-xs whitespace-nowrap text-muted-foreground">
                 {runDuration(run.startedAt, run.finishedAt) ?? (
                   <span className="text-sky-300">running…</span>
                 )}
