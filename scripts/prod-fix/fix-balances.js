@@ -1,0 +1,196 @@
+const db = require("better-sqlite3")("/data/engine.sqlite");
+const artifact = {
+  "id": "get_member_balances",
+  "version": "1.0.1",
+  "name": "Get Member Balances",
+  "description": "Log in to the teller console and retrieve a member's savings and checking balances.",
+  "goal": "Log in to the teller console and read member 100231's savings and checking balances",
+  "targetApp": "http://mockbank:4010",
+  "risk": "safe",
+  "createdAt": "2026-09-09T15:54:02.808Z",
+  "discoveryModel": "google/gemini-2.5-flash",
+  "discoveryRunId": "4d0aecc1-83de-4ac2-926b-f0b1710d020c",
+  "inputs": [
+    {
+      "name": "username",
+      "type": "string",
+      "required": true,
+      "description": "Teller console username"
+    },
+    {
+      "name": "password",
+      "type": "string",
+      "required": true,
+      "description": "Teller console password"
+    },
+    {
+      "name": "memberId",
+      "type": "string",
+      "required": true,
+      "description": "The ID of the member to look up"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "savingsBalance",
+      "type": "string",
+      "description": "The savings account balance for the member"
+    },
+    {
+      "name": "checkingBalance",
+      "type": "string",
+      "description": "The checking account balance for the member"
+    }
+  ],
+  "steps": [
+    {
+      "intent": "Navigate to the login page",
+      "action": "navigate",
+      "url": "http://mockbank:4010/login"
+    },
+    {
+      "intent": "Type username",
+      "action": "type",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "textbox",
+          "name": "Username",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "table.tbl > tbody > tr.row > td.cell > label > input"
+          }
+        ],
+        "robustness": "The username field is consistently labeled 'Username' and has a stable CSS path within the login form."
+      },
+      "value": "{{username}}"
+    },
+    {
+      "intent": "Type password",
+      "action": "type",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "textbox",
+          "name": "Password",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "table.tbl > tbody > tr.row > td.cell > label > input"
+          }
+        ],
+        "robustness": "The password field is consistently labeled 'Password' and has a stable CSS path within the login form."
+      },
+      "value": "{{password}}"
+    },
+    {
+      "intent": "Click login button",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "button",
+          "name": "Log in",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "The login button is reliably identified by its accessible name 'Log in'."
+      }
+    },
+    {
+      "intent": "Type member ID into search",
+      "action": "type",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "textbox",
+          "name": "Member ID or name",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "table.tbl > tbody > tr.row > td.cell > label > input"
+          }
+        ],
+        "robustness": "The member search field is consistently labeled 'Member ID or name' and has a stable CSS path on the dashboard."
+      },
+      "value": "{{memberId}}"
+    },
+    {
+      "intent": "Click search button",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "button",
+          "name": "Search",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "The search button is reliably identified by its accessible name 'Search'."
+      }
+    },
+    {
+      "intent": "Click view member link",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "link",
+          "name": "View member",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "The link to view member details is consistently labeled 'View member'."
+      }
+    },
+    {
+      "intent": "Extract savings balance",
+      "action": "extract",
+      "outputName": "savingsBalance",
+      "extractKind": "page-text-match",
+      "pattern": "savings \\d+ Rainy day \\$(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{2}))"
+    },
+    {
+      "intent": "Extract checking balance",
+      "action": "extract",
+      "outputName": "checkingBalance",
+      "extractKind": "page-text-match",
+      "pattern": "checking \\d+ - \\$(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{2}))"
+    }
+  ],
+  "checkpoint": {
+    "urlPattern": "http://mockbank:4010/members/{{memberId}}",
+    "visibleText": "Accounts",
+    "timeoutMs": 10000
+  },
+  "businessOutcomes": [
+    {
+      "code": "member_not_found",
+      "description": "No member exists with the requested ID \u2014 a legitimate answer, not a failure.",
+      "detect": {
+        "visibleText": "No member found"
+      }
+    },
+    {
+      "code": "session_expired",
+      "description": "The teller session ended from inactivity; log in again to continue.",
+      "detect": {
+        "visibleText": "Session expired"
+      }
+    }
+  ],
+  "reviewed": true
+};
+const a = JSON.stringify(artifact);
+// drop any older 1.0.1, insert the corrected reviewed version
+db.prepare("DELETE FROM capabilities WHERE id=? AND version=?").run(artifact.id, artifact.version);
+db.prepare("INSERT INTO capabilities (id, version, name, risk, reviewed, createdAt, artifact) VALUES (?,?,?,?,?,?,?)")
+  .run(artifact.id, artifact.version, artifact.name, artifact.risk, 1, artifact.createdAt, a);
+console.log("updated:", JSON.stringify(db.prepare("SELECT id, version, risk, reviewed FROM capabilities WHERE id=?").all(artifact.id)));
