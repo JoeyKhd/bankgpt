@@ -56,6 +56,16 @@ pnpm --filter engine exec playwright install chromium
 cp apps/engine/.env.example apps/engine/.env.local  # fill OPENROUTER_API_KEY
 ```
 
+### TypeScript toolchain
+
+The engine and mockbank **compile and typecheck with the native TypeScript 7
+compiler** (`typescript@7`, the Go-based `tsc`). Because typescript-eslint
+(and the classic `tsc` API) requires the TypeScript 5 compiler, the packages
+keep `typescript@5` for ESLint and expose TS 7 through the `ts7`
+(`npm:typescript@7`) alias. The `build` / `typecheck` scripts invoke
+`node ./node_modules/ts7/bin/tsc` explicitly so the `tsc` bin-name collision
+between the two packages cannot pick the wrong compiler.
+
 ## CLI (demo commands)
 
 ```bash

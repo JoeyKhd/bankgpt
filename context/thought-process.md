@@ -1600,3 +1600,39 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `apps/frontend/app/(app)/chat/chat-client.tsx`,
   `apps/engine/evidence/artifacts/freeze_debit_card.json`,
   `apps/engine/evidence/artifacts/open_sub_account.json`; D-052, D-053, D-056.
+
+### D-058 — 2026-09-09T13:11:36Z — Dependency refresh; engine + mockbank on the TypeScript 7 compiler
+
+- **Status:** accepted
+- **Decision/change:** Refreshed outdated packages across the workspace and
+  moved `apps/engine` and `apps/mockbank` onto the native **TypeScript 7**
+  compiler (`typescript@7.0.2`, the Go-based `tsc`). Updated: `next` +
+  `eslint-config-next` 16.2.6 → 16.3.4, `react`/`react-dom` 19.2.4 → 19.2.8,
+  `@tanstack/charts` 0.16.0 → 0.16.2, engine `better-sqlite3` 12 → 13
+  (N-API refactor, API-compatible here). TS7 removed the `baseUrl` option
+  and tightened path-alias resolution, so both backend tsconfigs dropped
+  `baseUrl` and use `"paths": { "@/*": ["./src/*.ts"] }` (the extensionless
+  `@/db` imports now resolve under NodeNext).
+  **TypeScript-eslint side-by-side:** typescript-eslint hard-requires the
+  classic TypeScript API and throws on `typescript >= 7`. The backend
+  packages therefore keep `typescript@5` purely as the ESLint parser's API
+  and expose TS 7 through the `ts7` (`npm:typescript@7.0.2`) alias; `build`
+  /`typecheck` call `node ./node_modules/ts7/bin/tsc` explicitly so the
+  `tsc` bin-name collision cannot pick the wrong compiler.
+  **Deliberately not updated:** `eslint` stays on 9.x (eslint-plugin-react/
+  import/jsx-a11y do not yet declare eslint 10 support — eslint 10 crashed
+  `eslint-plugin-react` at lint time); frontend `better-sqlite3` stays on 12
+  (better-auth 1.7 pins `better-sqlite3@^12`); `@types/node` stays on the
+  Node-22 line (matches the runtime); the **frontend stays on the classic
+  `typescript`** because eslint-config-next pulls typescript-eslint, which
+  has no TS7 API — TS7 was only requested for the backend apps.
+- **Why:** Owner request — update all packages where possible, and put
+  apps/engine + apps/mockbank on TypeScript 7.
+- **Consequences/follow-up:** Root `pnpm run lint` / `typecheck` / `build`
+  all pass. The two `typescript` versions coexist by design (5 for ESLint,
+  7 for compiling); do not "dedupe" them. When typescript-eslint ships TS7
+  support (typescript-eslint/typescript-eslint#10940) the `ts7` alias and
+  dual install can collapse into a single `typescript@7`.
+- **References:** `apps/engine/package.json`, `apps/mockbank/package.json`,
+  `apps/engine/tsconfig.json`, `apps/mockbank/tsconfig.json`,
+  `apps/engine/README.md` (TypeScript toolchain note), `pnpm-lock.yaml`.

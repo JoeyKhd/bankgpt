@@ -13,8 +13,7 @@
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
-    "paths": { "@/*": ["./src/*.js"] }
+    "paths": { "@/*": ["./src/*.ts"] }
   },
   "include": ["src"]
 }

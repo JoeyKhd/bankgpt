@@ -7,10 +7,10 @@
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=.env.local src/server.ts",
     "start": "node dist/server.js",
-    "build": "tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
+    "build": "node ./node_modules/ts7/bin/tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,js}\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "node ./node_modules/ts7/bin/tsc --noEmit"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
@@ -20,6 +20,7 @@
     "@types/node": "^22.20.1",
     "eslint": "^9.39.5",
     "prettier": "^3.9.6",
+    "ts7": "npm:typescript@7.0.2",
     "tsc-alias": "^1.9.4",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3",
