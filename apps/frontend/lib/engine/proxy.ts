@@ -24,8 +24,15 @@ import {
   EngineValidationError,
 } from "./errors"
 
+/** The better-auth session of the signed-in user. Handlers receive it so
+ * identity (requestedBy / decidedBy) is attached server-side, never trusted
+ * from the client body. */
+export type EngineSession = NonNullable<
+  Awaited<ReturnType<typeof requireSession>>
+>
+
 export const engineRoute = async (
-  handler: () => Promise<unknown>
+  handler: (session: EngineSession) => Promise<unknown>
 ): Promise<Response> => {
   const session = await requireSession()
   if (!session) {
@@ -33,7 +40,7 @@ export const engineRoute = async (
   }
 
   try {
-    return Response.json(await handler())
+    return Response.json(await handler(session))
   } catch (err) {
     if (err instanceof z.ZodError) {
       return Response.json(

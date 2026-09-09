@@ -20,6 +20,7 @@ import {
 } from "./errors"
 import {
   approveInterventionResponseSchema,
+  decideInterventionBodySchema,
   discoverRequestSchema,
   engineCapabilitySchema,
   engineCapabilitySummarySchema,
@@ -30,9 +31,15 @@ import {
   engineRunSchema,
   rejectInterventionResponseSchema,
   replayRequestSchema,
+  requestApprovalBodySchema,
+  requestApprovalResponseSchema,
   reviewCapabilityResponseSchema,
+  sessionActionBodySchema,
+  sessionActionResponseSchema,
+  sessionStateSchema,
   startRunResponseSchema,
   type ApproveInterventionResponse,
+  type DecideInterventionBody,
   type DiscoverRequest,
   type EngineCapability,
   type EngineCapabilitySummary,
@@ -42,7 +49,12 @@ import {
   type EngineRun,
   type RejectInterventionResponse,
   type ReplayRequest,
+  type RequestApprovalBody,
+  type RequestApprovalResponse,
   type ReviewCapabilityResponse,
+  type SessionActionBody,
+  type SessionActionResponse,
+  type SessionState,
   type StartRunResponse,
 } from "./schemas"
 
@@ -56,6 +68,9 @@ export const engineKeys = {
   run: (id: string) => [...engineKeys.runs(), id] as const,
   runEvidence: (id: string) => [...engineKeys.run(id), "evidence"] as const,
   interventions: () => [...engineKeys.all, "interventions"] as const,
+  intervention: (id: string) => [...engineKeys.interventions(), id] as const,
+  sessionState: (runId: string) =>
+    [...engineKeys.all, "session", runId] as const,
 } as const
 
 // One fetch wrapper for the proxy: network failure or a 503 from the proxy
@@ -143,6 +158,18 @@ export const fetchRunEvidence = (id: string): Promise<EngineEvidence> =>
 export const fetchInterventions = (): Promise<EngineIntervention[]> =>
   proxyFetch(z.array(engineInterventionSchema), "/api/engine/approvals")
 
+export const fetchIntervention = (id: string): Promise<EngineIntervention> =>
+  proxyFetch(
+    engineInterventionSchema,
+    `/api/engine/approvals/${encodeURIComponent(id)}`
+  )
+
+export const fetchSessionState = (runId: string): Promise<SessionState> =>
+  proxyFetch(
+    sessionStateSchema,
+    `/api/engine/sessions/${encodeURIComponent(runId)}/state`
+  )
+
 // ── queryOptions factories (pass straight to useQuery) ──────────────────
 
 /** Engine liveness; errors when the engine is offline. */
@@ -205,6 +232,25 @@ export const interventionsQuery = () =>
       query.state.data?.some((i) => i.status === "pending") ? 3000 : false,
   })
 
+export const interventionQuery = (id: string) =>
+  queryOptions({
+    queryKey: engineKeys.intervention(id),
+    queryFn: () => fetchIntervention(id),
+    retry: engineRetry,
+    refetchInterval: (query) =>
+      query.state.data?.status === "pending" ? 3000 : false,
+  })
+
+/** Live session state for the take-over panel; polls while the session is
+ * open so the operator sees the page as automation leaves it. */
+export const sessionStateQuery = (runId: string) =>
+  queryOptions({
+    queryKey: engineKeys.sessionState(runId),
+    queryFn: () => fetchSessionState(runId),
+    retry: false,
+    refetchInterval: 2500,
+  })
+
 // ── Mutation functions (wrap in useMutation where consumed) ─────────────
 
 export const startDiscovery = (
@@ -221,22 +267,48 @@ export const startReplay = (input: ReplayRequest): Promise<StartRunResponse> =>
     body: JSON.stringify(replayRequestSchema.parse(input)),
   })
 
+export const requestApproval = (
+  input: RequestApprovalBody
+): Promise<RequestApprovalResponse> =>
+  proxyFetch(requestApprovalResponseSchema, "/api/engine/approvals", {
+    method: "POST",
+    body: JSON.stringify(requestApprovalBodySchema.parse(input)),
+  })
+
 export const approveIntervention = (
-  id: string
+  id: string,
+  body: DecideInterventionBody = {}
 ): Promise<ApproveInterventionResponse> =>
   proxyFetch(
     approveInterventionResponseSchema,
     `/api/engine/approvals/${encodeURIComponent(id)}/approve`,
-    { method: "POST" }
+    {
+      method: "POST",
+      body: JSON.stringify(decideInterventionBodySchema.parse(body)),
+    }
   )
 
 export const rejectIntervention = (
-  id: string
+  id: string,
+  body: DecideInterventionBody = {}
 ): Promise<RejectInterventionResponse> =>
   proxyFetch(
     rejectInterventionResponseSchema,
     `/api/engine/approvals/${encodeURIComponent(id)}/reject`,
-    { method: "POST" }
+    {
+      method: "POST",
+      body: JSON.stringify(decideInterventionBodySchema.parse(body)),
+    }
+  )
+
+export const postSessionAction = (
+  runId: string,
+  body: SessionActionBody
+): Promise<SessionActionResponse> =>
+  proxyFetch(
+    sessionActionResponseSchema,
+    `/api/engine/sessions/${encodeURIComponent(runId)}/action`,
+    { method: "POST", body: JSON.stringify(sessionActionBodySchema.parse(body)) }
   )
 
 export const markCapabilityReviewed = (

@@ -243,8 +243,10 @@ export type EngineRunResult = z.infer<typeof engineRunResultSchema>
 
 // ── Wire rows (mirror of apps/engine/src/db.ts + src/server.ts) ─────────
 
-/** Run row status: "running" until finished, then the result's status. */
+/** Run row status: "awaiting_approval" while a risky replay waits for an
+ * operator decision, "running" until finished, then the result's status. */
 export const runStatusSchema = z.enum([
+  "awaiting_approval",
   "running",
   "success",
   "business_outcome",
@@ -288,16 +290,26 @@ export type EngineRunRow = z.infer<typeof engineRunRowSchema>
 /** Wire shape of one GET /approvals row (context still a JSON string). */
 export const engineInterventionRowSchema = z.object({
   id: z.string(),
-  runId: z.string(),
+  /** Null until the run actually starts (request-first approvals create it
+   * up front; it always exists by the time the engine decides). */
+  runId: z.string().nullable(),
   kind: z.string(),
   status: z.enum(["pending", "approved", "rejected", "resolved"]),
   reason: z.string(),
-  /** Context payload JSON: current step, page state, screenshot path. */
+  /** Context payload JSON: capability/goal, inputs, step, page state. */
   context: z.string(),
   createdAt: z.string(),
   resolvedAt: z.string().nullable(),
-  /** One-time token issued on approval; replay checks its presence. */
+  /** Identity (email) of the user/agent that raised the request. */
+  requestedBy: z.string().nullable(),
+  /** Identity (email) of the operator who decided. Null while pending. */
+  decidedBy: z.string().nullable(),
+  /** The operator's reason for the decision, when given. */
+  decisionReason: z.string().nullable(),
+  /** One-time approval token, scoped to the capability and single-use. */
   approvalToken: z.string().nullable(),
+  /** The run that consumed the approval token (single-use evidence). */
+  consumedByRunId: z.string().nullable(),
 })
 export type EngineInterventionRow = z.infer<typeof engineInterventionRowSchema>
 
@@ -354,17 +366,40 @@ export const engineRunSchema = z.object({
 })
 export type EngineRun = z.infer<typeof engineRunSchema>
 
+/** The parsed context payload of an intervention. Fields are all optional
+ * because the payload differs by kind (approval vs stuck). */
+export const interventionContextSchema = z.object({
+  capabilityId: z.string().optional(),
+  goal: z.string().optional(),
+  inputs: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+  source: z.string().optional(),
+  stepIndex: z.number().int().optional(),
+  intent: z.string().optional(),
+  expected: z.string().optional(),
+  observed: z.string().optional(),
+  url: z.string().optional(),
+  screenshotFile: z.string().optional(),
+  ariaSnapshot: z.string().optional(),
+  selfApproved: z.boolean().optional(),
+  executionRunId: z.string().optional(),
+})
+export type InterventionContext = z.infer<typeof interventionContextSchema>
+
 /** Intervention row with the context payload parsed. */
 export const engineInterventionSchema = z.object({
   id: z.string(),
-  runId: z.string(),
+  runId: z.string().nullable(),
   kind: z.string(),
   status: z.enum(["pending", "approved", "rejected", "resolved"]),
   reason: z.string(),
-  context: z.record(z.string(), z.unknown()),
+  context: interventionContextSchema,
   createdAt: z.string(),
   resolvedAt: z.string().nullable(),
+  requestedBy: z.string().nullable(),
+  decidedBy: z.string().nullable(),
+  decisionReason: z.string().nullable(),
   approvalToken: z.string().nullable(),
+  consumedByRunId: z.string().nullable(),
 })
 export type EngineIntervention = z.infer<typeof engineInterventionSchema>
 
@@ -406,10 +441,39 @@ export const startRunResponseSchema = z.object({
 })
 export type StartRunResponse = z.infer<typeof startRunResponseSchema>
 
-/** POST /approvals/:id/approve response — carries the one-time token. */
+/** POST /approvals body (request-first approval, D-046). requestedBy is
+ * attached by the proxy from the session — never trusted from the client. */
+export const requestApprovalBodySchema = z.object({
+  capabilityId: z.string().min(1),
+  inputs: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+  reason: z.string().optional(),
+})
+export type RequestApprovalBody = z.infer<typeof requestApprovalBodySchema>
+
+/** 201 response of POST /approvals. */
+export const requestApprovalResponseSchema = z.object({
+  id: z.string(),
+  runId: z.string(),
+})
+export type RequestApprovalResponse = z.infer<
+  typeof requestApprovalResponseSchema
+>
+
+/** POST /approvals/:id/approve | reject body. decidedBy comes from the
+ * session (proxy); only the free-text reason crosses from the client. */
+export const decideInterventionBodySchema = z.object({
+  reason: z.string().optional(),
+})
+export type DecideInterventionBody = z.infer<
+  typeof decideInterventionBodySchema
+>
+
+/** POST /approvals/:id/approve response. selfApproved flags that requester
+ * and decider coincide (recorded, not blocked — see NOTES). */
 export const approveInterventionResponseSchema = z.object({
   id: z.string(),
-  approvalToken: z.string(),
+  runId: z.string().nullable(),
+  selfApproved: z.boolean(),
 })
 export type ApproveInterventionResponse = z.infer<
   typeof approveInterventionResponseSchema
@@ -419,10 +483,52 @@ export type ApproveInterventionResponse = z.infer<
 export const rejectInterventionResponseSchema = z.object({
   id: z.string(),
   status: z.literal("rejected"),
+  selfApproved: z.boolean(),
 })
 export type RejectInterventionResponse = z.infer<
   typeof rejectInterventionResponseSchema
 >
+
+// ── Live-session state + operator actions (D-046 handoff) ───────────────
+
+/** One entry of the session's control log (who did what, when). */
+export const controlLogEntrySchema = z.object({
+  at: z.string(),
+  event: z.string(),
+  detail: z.string().optional(),
+})
+export type ControlLogEntry = z.infer<typeof controlLogEntrySchema>
+
+/** GET /sessions/:runId/state response — the operator's view of the live
+ * session. `undefined` fields mean the page could not be observed. */
+export const sessionStateSchema = z.object({
+  runId: z.string(),
+  owner: z.enum(["automation", "human"]),
+  paused: z.boolean(),
+  url: z.string(),
+  aria: z.string().optional(),
+  screenshotDataUrl: z.string().optional(),
+  controlLog: z.array(controlLogEntrySchema),
+})
+export type SessionState = z.infer<typeof sessionStateSchema>
+
+/** POST /sessions/:runId/action body — one manual operator step. */
+export const sessionActionBodySchema = z.object({
+  action: z.enum(["navigate", "click", "type", "select", "press"]),
+  role: z.string().optional(),
+  name: z.string().optional(),
+  value: z.string().optional(),
+  key: z.string().optional(),
+  url: z.string().optional(),
+})
+export type SessionActionBody = z.infer<typeof sessionActionBodySchema>
+
+/** POST /sessions/:runId/action response. */
+export const sessionActionResponseSchema = z.object({
+  detail: z.string(),
+  state: sessionStateSchema.optional(),
+})
+export type SessionActionResponse = z.infer<typeof sessionActionResponseSchema>
 
 /** POST /capabilities/:id/review response. */
 export const reviewCapabilityResponseSchema = z.object({

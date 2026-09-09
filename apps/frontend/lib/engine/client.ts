@@ -17,6 +17,7 @@ import {
 } from "./errors"
 import {
   approveInterventionResponseSchema,
+  decideInterventionBodySchema,
   discoverRequestSchema,
   engineCapabilityRowSchema,
   engineCapabilitySchema,
@@ -28,11 +29,18 @@ import {
   engineRunResultSchema,
   engineRunRowSchema,
   engineRunSchema,
+  interventionContextSchema,
   rejectInterventionResponseSchema,
   replayRequestSchema,
+  requestApprovalBodySchema,
+  requestApprovalResponseSchema,
   reviewCapabilityResponseSchema,
+  sessionActionBodySchema,
+  sessionActionResponseSchema,
+  sessionStateSchema,
   startRunResponseSchema,
   type ApproveInterventionResponse,
+  type DecideInterventionBody,
   type DiscoverRequest,
   type EngineCapability,
   type EngineCapabilitySummary,
@@ -43,7 +51,12 @@ import {
   type EngineRun,
   type RejectInterventionResponse,
   type ReplayRequest,
+  type RequestApprovalBody,
+  type RequestApprovalResponse,
   type ReviewCapabilityResponse,
+  type SessionActionBody,
+  type SessionActionResponse,
+  type SessionState,
   type StartRunResponse,
 } from "./schemas"
 
@@ -217,6 +230,22 @@ export const getEngineRunEvidence = async (
     `GET /runs/${id}/evidence`
   )
 
+/** Parse one intervention wire row: context is a JSON string column. */
+const toEngineIntervention = (
+  row: z.infer<typeof engineInterventionRowSchema>
+): EngineIntervention => {
+  let context: unknown
+  try {
+    context = JSON.parse(row.context)
+  } catch {
+    throw new EngineValidationError(`intervention ${row.id} context`)
+  }
+  return engineInterventionSchema.parse({
+    ...row,
+    context: interventionContextSchema.parse(context),
+  })
+}
+
 /** GET /approvals — interventions/approvals, newest first. */
 export const listEngineInterventions = async (): Promise<
   EngineIntervention[]
@@ -226,39 +255,98 @@ export const listEngineInterventions = async (): Promise<
     await engineFetch("/approvals"),
     "GET /approvals"
   )
-  return rows.map((row) => {
-    let context: unknown
-    try {
-      context = JSON.parse(row.context)
-    } catch {
-      throw new EngineValidationError(`intervention ${row.id} context`)
-    }
-    return engineInterventionSchema.parse({ ...row, context })
-  })
+  return rows.map(toEngineIntervention)
 }
 
-/** POST /approvals/:id/approve — issues the one-time approval token. */
-export const approveEngineIntervention = async (
+/** GET /approvals/:id — one intervention with parsed context. */
+export const getEngineIntervention = async (
   id: string
+): Promise<EngineIntervention> => {
+  const row = parse(
+    engineInterventionRowSchema,
+    await engineFetch(`/approvals/${encodeURIComponent(id)}`),
+    `GET /approvals/${id}`
+  )
+  return toEngineIntervention(row)
+}
+
+/** POST /approvals — request-first approval (D-046). The proxy attaches
+ * requestedBy from the session. 201 answers { id, runId }. */
+export const requestEngineApproval = async (
+  input: RequestApprovalBody & { requestedBy: string }
+): Promise<RequestApprovalResponse> =>
+  parse(
+    requestApprovalResponseSchema,
+    await engineFetch("/approvals", {
+      method: "POST",
+      body: JSON.stringify(requestApprovalBodySchema.merge(
+        z.object({ requestedBy: z.string() })
+      ).parse(input)),
+    }),
+    "POST /approvals"
+  )
+
+/** POST /approvals/:id/approve — decidedBy comes from the proxy's session.
+ * The engine issues a scoped one-time token and starts the run itself. */
+export const approveEngineIntervention = async (
+  id: string,
+  decidedBy: string,
+  body: DecideInterventionBody = {}
 ): Promise<ApproveInterventionResponse> =>
   parse(
     approveInterventionResponseSchema,
     await engineFetch(`/approvals/${encodeURIComponent(id)}/approve`, {
       method: "POST",
+      body: JSON.stringify({
+        decidedBy,
+        ...decideInterventionBodySchema.parse(body),
+      }),
     }),
     `POST /approvals/${id}/approve`
   )
 
 /** POST /approvals/:id/reject. */
 export const rejectEngineIntervention = async (
-  id: string
+  id: string,
+  decidedBy: string,
+  body: DecideInterventionBody = {}
 ): Promise<RejectInterventionResponse> =>
   parse(
     rejectInterventionResponseSchema,
     await engineFetch(`/approvals/${encodeURIComponent(id)}/reject`, {
       method: "POST",
+      body: JSON.stringify({
+        decidedBy,
+        ...decideInterventionBodySchema.parse(body),
+      }),
     }),
     `POST /approvals/${id}/reject`
+  )
+
+/** GET /sessions/:runId/state — the operator's view of a live session.
+ * 404 (session closed) surfaces as EngineHttpError for the UI to branch on. */
+export const getEngineSessionState = async (
+  runId: string
+): Promise<SessionState> =>
+  parse(
+    sessionStateSchema,
+    await engineFetch(`/sessions/${encodeURIComponent(runId)}/state`),
+    `GET /sessions/${runId}/state`
+  )
+
+/** POST /sessions/:runId/action — one manual step on the live session
+ * (human-owned only; 409 + error message otherwise). */
+export const postEngineSessionAction = async (
+  runId: string,
+  body: SessionActionBody
+): Promise<SessionActionResponse> =>
+  parse(
+    sessionActionResponseSchema,
+    await engineFetch(`/sessions/${encodeURIComponent(runId)}`, {
+      method: "POST",
+      body: JSON.stringify(sessionActionBodySchema.parse(body)),
+    }),
+    `POST /sessions/${runId}/action`
   )
 
 /** POST /discover — start an async discovery run; 202 answers the runId. */

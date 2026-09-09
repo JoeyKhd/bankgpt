@@ -16,6 +16,7 @@ const pillBase =
   "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap"
 
 const STATUS_TONE: Record<RunStatus, string> = {
+  awaiting_approval: "border-amber-400/25 bg-amber-400/10 text-amber-300",
   running: "border-sky-400/25 bg-sky-400/10 text-sky-300",
   success: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300",
   business_outcome: "border-violet-400/25 bg-violet-400/10 text-violet-300",
@@ -26,6 +27,7 @@ const STATUS_TONE: Record<RunStatus, string> = {
 }
 
 const STATUS_LABEL: Record<RunStatus, string> = {
+  awaiting_approval: "awaiting approval",
   running: "running",
   success: "success",
   business_outcome: "business outcome",
