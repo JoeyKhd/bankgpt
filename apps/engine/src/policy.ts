@@ -13,10 +13,11 @@
  *    artifacts, run logs, or evidence. `redactText` / `redactValue` scrub
  *    credential-shaped and PII-shaped substrings before anything is written.
  *
- * The approval-token seam is deliberately simple now (one shared local token);
- * per-operator identity lands with the operator console. The ENFORCEMENT
- * points are what matter: every risky execution path calls
- * `requireApproval` first.
+ * Approval tokens are issued by the approvals endpoints, scoped to one
+ * capability, and consumed by exactly one run (single-use); the server
+ * verifies them against the interventions store before calling this with
+ * `approved: true`. The ENFORCEMENT points are what matter here: every
+ * risky execution path calls `requireApproval` first.
  */
 import { z } from "zod"
 import { StepActionSchema, RiskClassSchema } from "./artifact.js"
@@ -54,6 +55,13 @@ export const PolicySchema = z.object({
    * POST that failed server-side is never blindly repeated.
    */
   transientErrorMaxReloads: z.number().int().nonnegative().default(3),
+  /**
+   * Live-session handoff (assignment §3.6): how long a stuck run waits for
+   * a human operator to take over and hand control back before it fails
+   * with "operator did not resume". Generous on purpose — the operator
+   * inbox is a human surface.
+   */
+  handoffTimeoutMs: z.number().int().positive().default(1_200_000),
 })
 export type Policy = z.infer<typeof PolicySchema>
 
@@ -88,6 +96,7 @@ export const defaultPolicy = (): Policy =>
     discoveryTimeoutMs: 180_000,
     dialogHandling: "accept",
     transientErrorMaxReloads: 3,
+    handoffTimeoutMs: 1_200_000,
   })
 
 /** Thrown when the agent attempts to leave the allowlisted scope. */

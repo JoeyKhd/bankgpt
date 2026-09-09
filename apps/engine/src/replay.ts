@@ -32,6 +32,7 @@ import {
 } from "./policy.js"
 import { attachDialogHandler } from "./dialogs.js"
 import type { EvidenceWriter } from "./evidence.js"
+import { waitWhileNotAutomation, type LiveSession } from "./session.js"
 
 /** Inputs as supplied by the caller (validated against the artifact). */
 export type ReplayInputs = Record<string, string | number | boolean>
@@ -346,6 +347,27 @@ export type ReplayOptions = {
   /** True when an approval token for this run was verified by the caller. */
   approved: boolean
   events?: ReplayEvents
+  /**
+   * The registered live session this run operates on (server path). When
+   * present, the run drives the session's page (never closes it) and blocks
+   * before every action while the session is paused or human-owned.
+   */
+  session?: LiveSession
+  /**
+   * Live-session handoff (assignment §3.6): when a step fails all attempts
+   * and no business outcome matches, the run calls this BEFORE declaring a
+   * hard failure. The implementation raises an intervention and waits for
+   * an operator; returning true re-drives the failed step against the
+   * (human-adjusted) page, false fails the run.
+   */
+  handoff?: {
+    onStuck: (info: {
+      stepIndex: number
+      intent: string
+      expected: string
+      observed: string
+    }) => Promise<boolean>
+  }
 }
 
 /**
@@ -378,8 +400,12 @@ export const replayCapability = async (
     )
   }
 
-  const context = await options.browser.newContext()
-  const page = await context.newPage()
+  // Server runs drive a registered live session's page (handoff-capable);
+  // CLI runs create and own a private context.
+  const context = options.session
+    ? options.session.context
+    : await options.browser.newContext()
+  const page = options.session ? options.session.page : await context.newPage()
   // Native confirm/alert dialogs (e.g. the "open this sub-account?" gate) are
   // answered per policy and logged; auto-accept keeps recorded flows moving.
   attachDialogHandler(page, policy, evidence, options.runId)
@@ -439,6 +465,10 @@ export const replayCapability = async (
     }
   }
 
+  // Steps that already escalated to a human once (bounded: one handoff
+  // per step — if the fix did not hold, the run fails for real).
+  const handoffUsed = new Set<number>()
+
   try {
     for (let i = 0; i < artifact.steps.length; i++) {
       const step = artifact.steps[i]!
@@ -455,6 +485,9 @@ export const replayCapability = async (
       let detail = ""
       // Deliberate retry for transient conditions (slow loads, races).
       for (let attempt = 1; attempt <= MAX_STEP_ATTEMPTS; attempt++) {
+        // Live-session control gate: automation acts only while it owns the
+        // session and is not paused (pause/cede arrive over the WS channel).
+        if (options.session) await waitWhileNotAutomation(options.session)
         try {
           // Transient-5xx recovery: if the LAST action landed on the app's
           // transient error page ("Core system unavailable — try again"),
@@ -590,6 +623,44 @@ export const replayCapability = async (
             durationMs: durationMs(),
           }
         }
+        // Not a declared outcome — the run is STUCK. On a live session,
+        // escalate: raise an intervention and wait for a human to take over
+        // the SAME page and hand control back. A resumed run re-drives the
+        // failed step against the human-adjusted page.
+        if (options.session && options.handoff && !handoffUsed.has(i)) {
+          handoffUsed.add(i)
+          const observed =
+            lastError instanceof Error ? lastError.message : String(lastError)
+          evidence.logStep({
+            runId: options.runId,
+            stepIndex: i,
+            at: new Date().toISOString(),
+            action: "handoff",
+            target: page.url(),
+            reason: `step ${i} stuck (${observed}) — escalated to a human operator; run paused until control is returned`,
+            durationMs: 0,
+            result: "ok",
+          })
+          const resume = await options.handoff.onStuck({
+            stepIndex: i,
+            intent: step.intent,
+            expected: step.intent,
+            observed,
+          })
+          if (resume) {
+            i-- // re-drive the failed step against the human-adjusted page
+            continue
+          }
+          evidence.logStep({
+            runId: options.runId,
+            stepIndex: i,
+            at: new Date().toISOString(),
+            action: "handoff",
+            reason: "operator did not resume in time — failing the run",
+            durationMs: 0,
+            result: "failed",
+          })
+        }
         return await fail(
           i,
           step.intent,
@@ -627,7 +698,9 @@ export const replayCapability = async (
     }
     throw err
   } finally {
-    await context.close().catch(() => undefined)
+    // The live session's context is owned by the session registry (the
+    // operator may still be looking at it); only CLI-owned contexts close here.
+    if (!options.session) await context.close().catch(() => undefined)
   }
 }
 

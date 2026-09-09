@@ -40,6 +40,7 @@ import {
 } from "./policy.js"
 import { attachDialogHandler } from "./dialogs.js"
 import type { EvidenceWriter } from "./evidence.js"
+import { waitWhileNotAutomation, type LiveSession } from "./session.js"
 
 // ---------------------------------------------------------------------------
 // The action vocabulary the model may choose from (mirrors artifact steps,
@@ -215,6 +216,15 @@ type ExecutedStep = {
   urlAfter: string
 }
 
+export type DiscoveryEvents = {
+  /** Fired after each executed step (ok or failed) — the WS step stream. */
+  onStep?: (
+    stepIndex: number,
+    decision: { action: string; reasoning: string },
+    ok: boolean
+  ) => void
+}
+
 export type DiscoveryOptions = {
   goal: string
   targetUrl: string
@@ -225,6 +235,23 @@ export type DiscoveryOptions = {
   model: string
   apiKey: string
   browser?: Browser
+  /**
+   * The registered live session this run operates on (server path). When
+   * present, discovery drives the session's page (never closes it) and
+   * blocks before every action while the session is paused or human-owned.
+   */
+  session?: LiveSession
+  events?: DiscoveryEvents
+  /**
+   * Live-session handoff (assignment §3.6): when the model reports stuck,
+   * the loop calls this BEFORE finishing as stuck. The implementation
+   * raises an intervention and waits for an operator; returning true
+   * resumes discovery against the (human-adjusted) page, false ends the
+   * run as stuck.
+   */
+  handoff?: {
+    onStuck: (info: { reason: string; stepIndex: number }) => Promise<boolean>
+  }
   /** Called with the distilled artifact when distillation succeeds. */
   onArtifact?: (artifact: CapabilityArtifact) => void
 }
@@ -356,8 +383,12 @@ export const runDiscovery = async (
 
   const ownBrowser = options.browser === undefined
   const browser = options.browser ?? (await chromium.launch({ headless: true }))
-  const context = await browser.newContext()
-  const page = await context.newPage()
+  // Server runs drive a registered live session's page (handoff-capable);
+  // CLI runs own a private context.
+  const context = options.session
+    ? options.session.context
+    : await browser.newContext()
+  const page = options.session ? options.session.page : await context.newPage()
   // Native confirm/alert dialogs are answered per policy and logged — without
   // a listener Playwright dismisses them, silently canceling gated submits.
   attachDialogHandler(page, policy, evidence, runId)
@@ -435,6 +466,9 @@ export const runDiscovery = async (
         // action allowlist only governs real UI interactions.
         if (decision.action !== "done" && decision.action !== "stuck") {
           assertActionAllowed(policy, decision.action)
+          // Live-session control gate: act only while automation owns the
+          // session and it is not paused (pause/cede arrive over WS).
+          if (options.session) await waitWhileNotAutomation(options.session)
         }
         outcomeNote = await act(page, decision)
       } catch (err) {
@@ -491,6 +525,11 @@ export const runDiscovery = async (
           ? outcomeNote
           : undefined,
       })
+      options.events?.onStep?.(
+        stepIndex,
+        { action: decision.action, reasoning: decision.reasoning },
+        !outcomeNote.startsWith("ACTION FAILED")
+      )
 
       if (decision.action === "done") {
         finalStatus = "success"
@@ -513,6 +552,41 @@ export const runDiscovery = async (
         break
       }
       if (decision.action === "stuck") {
+        // Live-session handoff: before giving up, escalate to a human
+        // operator — they take over the SAME page, fix the blocker, and
+        // hand control back; discovery then continues from what the human
+        // left behind. Only when nobody resumes does the run end stuck.
+        if (options.session && options.handoff) {
+          evidence.logStep({
+            runId,
+            stepIndex,
+            at: new Date().toISOString(),
+            action: "handoff",
+            target: page.url(),
+            reason: `discovery stuck (${
+              decision.reason ?? "model reported stuck"
+            }) — escalated to a human operator; run paused until control is returned`,
+            durationMs: 0,
+            result: "ok",
+          })
+          const resume = await options.handoff.onStuck({
+            reason: decision.reason ?? "model reported stuck",
+            stepIndex: executed.length,
+          })
+          if (resume) {
+            transcript.push({
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "OPERATOR HANDOFF: a human operator took control of the live session, performed manual steps, and returned control. Observe the current page and continue toward the goal.",
+                },
+              ],
+            })
+            observation = await observe(page)
+            continue
+          }
+        }
         finalStatus = "stuck"
         stopReason = decision.reason ?? "model reported stuck"
         break
@@ -561,7 +635,9 @@ export const runDiscovery = async (
       durationMs: durationMs(),
     }
   } finally {
-    await context.close().catch(() => undefined)
+    // A live session's context is owned by the session registry (the
+    // operator may still be looking at it); only CLI-owned resources close.
+    if (!options.session) await context.close().catch(() => undefined)
     if (ownBrowser) await browser.close().catch(() => undefined)
   }
 }

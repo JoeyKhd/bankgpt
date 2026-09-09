@@ -83,6 +83,43 @@ export const waitWhileNotAutomation = (session: LiveSession): Promise<void> =>
     check()
   })
 
+/**
+ * Block until automation owns the session again (a stuck run waiting for an
+ * operator), or until `timeoutMs` elapses. "resumed" means a human handed
+ * control back; "timeout" means nobody answered the handoff in time.
+ */
+export const waitForAutomation = (
+  session: LiveSession,
+  timeoutMs: number
+): Promise<"resumed" | "timeout"> =>
+  new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      session.emitter.off("change", check)
+      resolve("timeout")
+    }, timeoutMs)
+    const check = () => {
+      if (session.owner === "automation" && !session.paused) {
+        clearTimeout(timer)
+        session.emitter.off("change", check)
+        resolve("resumed")
+      }
+    }
+    session.emitter.on("change", check)
+    check()
+  })
+
+/** Summary of every live session, for the WS hello + debugging. */
+export const listSessions = (): Array<{
+  runId: string
+  owner: ControlOwner
+  paused: boolean
+}> =>
+  [...sessions.values()].map((s) => ({
+    runId: s.runId,
+    owner: s.owner,
+    paused: s.paused,
+  }))
+
 export const pauseSession = (runId: string): boolean => {
   const s = sessions.get(runId)
   if (!s || s.paused) return false
