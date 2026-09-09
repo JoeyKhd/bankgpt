@@ -68,7 +68,15 @@ docker compose up
   Playwright browser runs inside the container network, so a discovery
   `targetUrl` must use the service name — `http://mockbank:4010`, not
   `http://localhost:4010` (inside the engine container `localhost` is the
-  container itself).
+  container itself). The safety policy must also allow that host: the
+  default allowlist only trusts `localhost`/`127.0.0.1`, so compose sets
+  `ENGINE_ALLOWED_URL_PATTERNS=^https?://mockbank(:\d+)?(/|$)` on the
+  engine service. Without it a discovery run fails instantly with
+  `policy violation (url)`. The safety policy must also allow that host: the
+  default allowlist only trusts `localhost`/`127.0.0.1`, so compose sets
+  `ENGINE_ALLOWED_URL_PATTERNS=^https?://mockbank(:\d+)?(/|$)` on the
+  engine service. Without it a discovery run fails instantly with
+  `policy violation (url)`.
 
 <Callout title="First run only">
   The frontend's auth schema must exist before sign-in works. If

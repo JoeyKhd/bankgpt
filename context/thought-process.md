@@ -1886,3 +1886,31 @@ BLOB, createdAt`, PK `(runId, name)`) stores every evidence file as a
   `apps/frontend/components/admin/interventions-inbox.tsx`,
   `apps/docs/content/docs/troubleshooting.mdx`,
   `apps/docs/content/docs/running-locally.mdx`.
+
+## D-066 — 2026-09-09T15:47:52Z — ENGINE_ALLOWED_URL_PATTERNS env override for containerized targets
+
+- **Status:** accepted
+- **Decision/change:** Added an `ENGINE_ALLOWED_URL_PATTERNS` env override
+  (comma-separated regexes) that replaces the default policy URL allowlist
+  when set, wired in `apps/engine/src/index.ts`, and shipped
+  `^https?://mockbank(:\d+)?(/|$)` in `docker-compose.yaml`. The default
+  policy only allowlists `localhost`/`127.0.0.1` — correct for dev, but it
+  refused the compose service-name target `http://mockbank:4010` as a
+  `policy violation (url)` and every production discovery run failed in
+  ~0.3 s. Confirmed live against the deployed engine: `GET /policy` showed
+  only the localhost patterns and a test discovery run hard-failed
+  instantly. Documented in `.env.example`, `running-locally`, and a new
+  troubleshooting entry.
+- **Why:** The owner asked the agent to run discovery against production;
+  the engine could not legally reach its own target. AGENTS.md and
+  `running-locally.mdx` already documented the service-name URL, but the
+  code never allowed it — the docs and the policy had drifted.
+- **Consequences/follow-up:** The production engine image must be rebuilt
+  and redeployed for the override to exist (the agent cannot rebuild the
+  Dokploy image; compose now carries the pattern so a plain redeploy is
+  enough). The override REPLACES the allowlist when set, so it must stay
+  narrow — it is the guardrail that stops the agent roaming the open web.
+- **References:** `apps/engine/src/index.ts`, `apps/engine/src/policy.ts`,
+  `docker-compose.yaml`, `apps/engine/.env.example`,
+  `apps/docs/content/docs/running-locally.mdx`,
+  `apps/docs/content/docs/troubleshooting.mdx`.

@@ -14,6 +14,16 @@ a dead live-session channel. Start the engine with
 `pnpm --filter engine dev`, or start everything with `pnpm dev` from the
 root.
 
+## Discovery fails instantly with "policy violation (url)"
+
+The engine's safety allowlist refused the target before the browser even
+opened. The default policy only trusts `localhost`/`127.0.0.1`, so a
+compose target reached by service name (`http://mockbank:4010`) is out of
+scope. Set `ENGINE_ALLOWED_URL_PATTERNS` on the engine service to a narrow
+regex for the target host (compose already ships
+`^https?://mockbank(:\d+)?(/|$)`) and restart the engine. The current
+allowlist is readable at `GET /policy`.
+
 ## Live-session controls do nothing in production (pause/cede/resume, inbox updates)
 
 The browser connects directly to the engine's `/ws` channel. Check two

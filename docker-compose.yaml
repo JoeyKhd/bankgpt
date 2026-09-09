@@ -75,6 +75,11 @@ services:
       ENGINE_DB_PATH: /data/engine.sqlite
       # REQUIRED for the discovery loop's model calls.
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      # Allow the agent to reach the mock bank by its compose service name.
+      # The default policy only trusts localhost/127.0.0.1 (dev); inside the
+      # network the target is http://mockbank:4010, which would otherwise be
+      # refused as a policy scope violation. Comma-separated regexes.
+      ENGINE_ALLOWED_URL_PATTERNS: ${ENGINE_ALLOWED_URL_PATTERNS:-^https?://mockbank(:\d+)?(/|$)}
     volumes:
       - engine-data:/data
     depends_on:
