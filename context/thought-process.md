@@ -1943,3 +1943,29 @@ BLOB, createdAt`, PK `(runId, name)`) stores every evidence file as a
   `apps/frontend/lib/engine/client.ts`,
   `apps/frontend/lib/engine/schemas.ts`,
   `apps/frontend/app/api/engine/capabilities/[id]/route.ts`.
+
+## D-068 — 2026-09-09T18:17:19Z — Seed canonical capabilities on engine first boot
+
+- **Status:** accepted
+- **Decision/change:** The engine now seeds the two canonical mockbank
+  capabilities (`get_member_balances` v1.0.2 with the corrected `Accounts`
+  checkpoint, `open_savings_sub_account`) from committed
+  `apps/engine/seeds/*.json` on startup, via `src/seed.ts`. Seeding only
+  inserts a capability whose id is entirely absent — it never overwrites an
+  existing capability, so local review passes and fresh discoveries are
+  preserved. The Dockerfile copies `seeds/` into the runtime image.
+  Balances replay verified green against production (savings 12,480.55,
+  checking 1,204.10, zero model calls) after the D-067 PUT applied the
+  checkpoint fix as v1.0.2 (a version bump with a fresh `createdAt`, since
+  `getCapability` returns the latest by `createdAt`).
+- **Why:** The owner observed that a fresh dev environment should already
+  have the working capabilities instead of requiring an LLM discovery plus
+  a manual checkpoint fix. This closes the loop: discover once, commit the
+  reviewed artifact as a seed, every new environment starts working.
+- **Consequences/follow-up:** New dev checkouts and fresh compose volumes
+  boot with both capabilities ready (the safe one replays immediately; the
+  risky one still requires per-run approval). To refresh a seed, PUT the
+  reviewed artifact and copy it into `apps/engine/seeds/`.
+- **References:** `apps/engine/src/seed.ts`, `apps/engine/seeds/`,
+  `apps/engine/src/server.ts`, `apps/engine/Dockerfile`,
+  `apps/docs/content/docs/running-locally.mdx`.

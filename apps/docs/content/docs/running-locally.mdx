@@ -64,6 +64,12 @@ docker compose up
 - **better-auth schema**: the frontend container seeds a build-time
   migrated database onto a fresh volume on first boot (copied only when
   the volume is empty; existing data is never touched).
+- **Seeded capabilities**: on first boot the engine inserts the two
+  canonical mockbank capabilities (`get_member_balances`,
+  `open_savings_sub_account`) from `apps/engine/seeds/` so a fresh
+  environment works out of the box — no discovery needed. Seeding only
+  fills capabilities that are entirely absent; it never overwrites
+  existing ones.
 - **Discovery targets**: the engine image ships Chromium, but the
   Playwright browser runs inside the container network, so a discovery
   `targetUrl` must use the service name — `http://mockbank:4010`, not

@@ -99,6 +99,7 @@ import {
   type InterventionRow,
 } from "@/db"
 import { runDiscovery } from "@/discovery"
+import { seedCapabilities } from "@/seed"
 import { replayCapability, validateInputs } from "@/replay"
 import {
   defaultPolicy,
@@ -249,6 +250,10 @@ export const startEngineServer = (options: ServerOptions) => {
     options.openRouterApiKey ?? process.env.OPENROUTER_API_KEY ?? ""
   const discoveryModel = options.discoveryModel ?? DEFAULT_MODEL
   const { db } = options
+
+  // Fill in the canonical mockbank capabilities on first boot (D-068) so a
+  // fresh environment works out of the box; never overwrites existing rows.
+  seedCapabilities(db)
 
   // One shared headless browser for replay/discovery sessions.
   let browserPromise: Promise<Browser> | undefined

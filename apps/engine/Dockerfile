@@ -52,6 +52,8 @@ RUN addgroup --system nodejs && adduser --system --ingroup nodejs engine \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=prod-deps --chown=engine:nodejs /out/node_modules ./node_modules
 COPY --from=build --chown=engine:nodejs /repo/apps/engine/dist ./dist
+# Canonical capability seeds, read on first boot (src/seed.ts, D-068).
+COPY --from=build --chown=engine:nodejs /repo/apps/engine/seeds ./seeds
 COPY --from=build --chown=engine:nodejs /repo/apps/engine/package.json ./package.json
 COPY --from=build --chown=engine:nodejs /ms-playwright /ms-playwright
 # SQLite lives on a named volume mounted at /data (ENGINE_DB_PATH).

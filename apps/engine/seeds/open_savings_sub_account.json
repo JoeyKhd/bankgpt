@@ -1,0 +1,251 @@
+{
+  "id": "open_savings_sub_account",
+  "version": "1.0.0",
+  "name": "Open Savings Sub-Account",
+  "description": "Open a savings sub-account for a given member ID with an initial deposit.",
+  "goal": "Open a savings sub-account for member 100231",
+  "targetApp": "http://mockbank:4010",
+  "risk": "risky",
+  "createdAt": "2026-09-09T15:53:10.401Z",
+  "discoveryModel": "google/gemini-2.5-flash",
+  "discoveryRunId": "104ca5df-7e50-4c1a-a8b8-dba3b78f28a4",
+  "inputs": [
+    {
+      "name": "memberId",
+      "type": "string",
+      "required": true,
+      "description": "The ID of the member for whom to open a sub-account."
+    },
+    {
+      "name": "initialDeposit",
+      "type": "number",
+      "required": true,
+      "description": "The initial deposit amount for the sub-account."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "accountNumber",
+      "type": "string",
+      "description": "The newly opened sub-account number."
+    },
+    {
+      "name": "confirmationNumber",
+      "type": "string",
+      "description": "The confirmation number for the sub-account opening."
+    }
+  ],
+  "steps": [
+    {
+      "intent": "Login to the application",
+      "action": "type",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "textbox",
+          "name": "Username",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "table.tbl > tbody > tr.row > td.cell > label > input"
+          }
+        ],
+        "robustness": "The username textbox is consistently labeled and locatable via CSS."
+      },
+      "value": "username"
+    },
+    {
+      "intent": "Enter password",
+      "action": "type",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "textbox",
+          "name": "Password",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "table.tbl > tbody > tr.row > td.cell > label > input"
+          }
+        ],
+        "robustness": "The password textbox is consistently labeled and locatable via CSS."
+      },
+      "value": "password"
+    },
+    {
+      "intent": "Click Log in button",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "button",
+          "name": "Log in",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "The login button is consistently labeled 'Log in'."
+      }
+    },
+    {
+      "intent": "Search for the member",
+      "action": "type",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "textbox",
+          "name": "Member ID or name",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "table.tbl > tbody > tr.row > td.cell > label > input"
+          }
+        ],
+        "robustness": "The member search input field is reliably identified by its accessible name and CSS path."
+      },
+      "value": "{{memberId}}"
+    },
+    {
+      "intent": "Click Search button",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "button",
+          "name": "Search",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "The search button is consistently labeled 'Search'."
+      }
+    },
+    {
+      "intent": "View member details",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "link",
+          "name": "View member",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "The 'View member' link is a stable target after a successful search."
+      }
+    },
+    {
+      "intent": "Navigate to the open sub-account page",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "link",
+          "name": "Open sub-account",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "The 'Open sub-account' link is a stable navigation target on the member's page."
+      }
+    },
+    {
+      "intent": "Enter initial deposit amount",
+      "action": "type",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "textbox",
+          "name": "Initial deposit (USD)",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "table.tbl > tbody > tr.row > td.cell > label > input"
+          }
+        ],
+        "robustness": "The initial deposit input field is consistently labeled and locatable via CSS."
+      },
+      "value": "{{initialDeposit}}"
+    },
+    {
+      "intent": "Click Continue to review",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "button",
+          "name": "Continue",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "The 'Continue' button is a stable target to proceed with the sub-account opening."
+      }
+    },
+    {
+      "intent": "Confirm details and authorize",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "checkbox",
+          "name": "I confirm these details are correct and authorize opening this sub-account.",
+          "exact": true
+        },
+        "fallbacks": [
+          {
+            "strategy": "css",
+            "css": "table.tbl > tbody > tr.row > td.cell > label > input"
+          }
+        ],
+        "robustness": "The confirmation checkbox has a unique and stable accessible name and CSS path."
+      }
+    },
+    {
+      "intent": "Submit to open sub-account",
+      "action": "click",
+      "target": {
+        "primary": {
+          "strategy": "a11y",
+          "role": "button",
+          "name": "Open sub-account",
+          "exact": true
+        },
+        "fallbacks": [],
+        "robustness": "The 'Open sub-account' button on the review page is a clear and stable target."
+      }
+    },
+    {
+      "intent": "Extract account number",
+      "action": "extract",
+      "outputName": "accountNumber",
+      "extractKind": "page-text-match",
+      "pattern": "Account number (\\d+)"
+    },
+    {
+      "intent": "Extract confirmation number",
+      "action": "extract",
+      "outputName": "confirmationNumber",
+      "extractKind": "page-text-match",
+      "pattern": "Confirmation number (CNF-\\d+)"
+    }
+  ],
+  "checkpoint": {
+    "urlPattern": "http://mockbank:4010/members/\\d+/accounts/\\d+/confirmation\\?c=CNF-\\d+",
+    "visibleText": "Sub-account opened The sub-account was opened successfully."
+  },
+  "businessOutcomes": [
+    {
+      "code": "member_not_found",
+      "description": "No member exists with the requested ID \u2014 a legitimate answer, not a failure.",
+      "detect": {
+        "visibleText": "No member found"
+      }
+    }
+  ],
+  "reviewed": true
+}
