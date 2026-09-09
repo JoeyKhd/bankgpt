@@ -1085,3 +1085,30 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   owed to `apps/frontend/.env.example`.
 - **References:** `apps/engine/README.md`, `apps/engine/NOTES.md`; D-039,
   D-041, D-023.
+
+### D-044 — 2026-09-09T00:01:45Z — Typed engine client + /api/engine proxy layer in the frontend
+
+- **Status:** accepted (implements D-041 frontend half)
+- **Decision/change:** Built `apps/frontend/lib/engine/`: zod mirrors of the
+  engine contract (artifact, result taxonomy, run/intervention rows,
+  request/response) with `z.infer` types; a server-only client (`client.ts`)
+  reading `ENGINE_URL` (default `http://127.0.0.1:4011`); thin auth-gated
+  proxy route handlers under `app/api/engine/` (capabilities, runs +
+  evidence, discover, replay, approvals approve/reject, status); and
+  `@tanstack/react-query` query keys + fetchers + mutations (`queries.ts`).
+  Offline degradation is explicit: proxy answers 503 with a "pnpm --filter
+  engine dev" hint, client fetchers raise `EngineOfflineError`, and the
+  `/admin` overview falls back to the stub catalog with an amber banner
+  (live stats — deduped capabilities, risky count, pending interventions —
+  when reachable). `ENGINE_URL` added (OPTIONAL) to
+  `apps/frontend/.env.example`.
+- **Why:** The admin console and chat need one typed, degradable seam to the
+  engine; per D-023 the engine is a separate process, so the frontend reaches
+  it server-side over HTTP.
+- **Consequences/follow-up:** No `QueryClientProvider` exists yet — the
+  Phase-3 page worker mounts one. WebSocket `/ws` (run-step stream,
+  pause/cede/resume) is NOT proxied (Next route handlers can't upgrade WS) —
+  the live-session UI needs a separate transport answer. `POST /capabilities`
+  intentionally not proxied. Chat stub catalog and the four PageStub surfaces
+  remain for later workers.
+- **References:** `apps/frontend/lib/engine/NOTES.md`, D-041, D-043.
