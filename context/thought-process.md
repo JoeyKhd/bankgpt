@@ -1693,3 +1693,29 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `apps/engine/src/index.ts`, `apps/frontend/lib/engine/schemas.ts`,
   `apps/frontend/components/admin/run-detail.tsx`, `README.md`,
   `REPORT.md`, `apps/engine/README.md`; D-041, D-047, D-048.
+
+### D-060 — 2026-09-09T13:41:26Z — Add apps/docs, a BankGPT-branded Fumadocs documentation site
+
+- **Status:** accepted
+- **Decision/change:** New `apps/docs` workspace package — a Fumadocs
+  (Framework mode, Next.js 16 + Fumadocs MDX) documentation site. Branded
+  dark-only to the BankGPT tokens (forced dark theme, no toggle; #09090B
+  bg, #131316 cards, white/6 hairlines, emerald primary, signature
+  gradient, Inter + IBM Plex Mono, BankGPT mark in the nav). Runs on port
+  **3001** so the root `pnpm run dev` fan-out starts it alongside frontend
+  :3000, engine :4011, mockbank :4010. Fumadocs MDX uses the Macro API
+  (`lib/source.ts`) so there is no codegen step. Seeded with intro,
+  running-locally, architecture, and capabilities pages sourced from
+  README/REPORT. AGENTS.md gains a docs-sync rule (update apps/docs in the
+  same change when behavior, the app surface, APIs, ports, or setup
+  change). Docs content was written against the post-D-059
+  evidence-in-SQLite reality.
+- **Why:** Owner request — a documentation app using Fumadocs, on brand
+  with apps/frontend, running with `pnpm run dev`, with a standing rule
+  that docs stay up to date.
+- **Consequences/follow-up:** `docs` joins the workspace scripts
+  (dev/build/lint/typecheck/format). Root lint/typecheck/build pass across
+  all four apps. The docs-sync rule in AGENTS.md means future
+  behavior/setup changes must touch `apps/docs/content/docs/` too.
+- **References:** `apps/docs/`, `AGENTS.md`, root `package.json`,
+  `pnpm-workspace.yaml`; D-059.
