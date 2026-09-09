@@ -88,8 +88,15 @@ The same stack runs in containers — one image per app
 ```bash
 cp .env.example .env   # set BETTER_AUTH_SECRET + OPENROUTER_API_KEY
 docker compose build
-docker compose up      # frontend :3000, docs :3001, engine :4011, mockbank :4010
+docker compose up
 ```
+
+Compose publishes **no host ports** — all four services talk on the
+internal Docker network. Routing is configured externally (we use Dokploy):
+point public domains at the internal container ports — frontend `3000`,
+docs `3001`, engine `4011`, mockbank `4010`. The engine also needs a public
+domain for its `/ws` live-session channel (the browser connects directly);
+set `NEXT_PUBLIC_ENGINE_WS_URL` to it, e.g. `wss://engine.example.com/ws`.
 
 Both SQLite databases persist on named volumes (`frontend-data` →
 `/data/app.sqlite`, `engine-data` → `/data/engine.sqlite`); they survive

@@ -42,9 +42,17 @@ The same stack runs in containers — one image per app
 ```bash
 cp .env.example .env   # set BETTER_AUTH_SECRET + OPENROUTER_API_KEY
 docker compose build
-docker compose up      # frontend :3000, docs :3001, engine :4011, mockbank :4010
+docker compose up
 ```
 
+- **Ports**: compose publishes no host ports. All services talk on the
+  internal Docker network; routing is configured externally (Dokploy) by
+  pointing domains at the internal container ports — frontend `3000`,
+  docs `3001`, engine `4011`, mockbank `4010`. The engine's `/ws`
+  live-session channel must also be publicly reachable (the browser
+  connects to it directly — the Next server cannot proxy WS upgrades), so
+  route a domain to engine port `4011` and set `NEXT_PUBLIC_ENGINE_WS_URL`
+  to it, e.g. `wss://engine.example.com/ws`.
 - **Persistent storage**: both SQLite databases live on named volumes —
   `frontend-data` → `/data/app.sqlite` (auth + chat + app data) and
   `engine-data` → `/data/engine.sqlite` (capabilities, runs,
@@ -58,8 +66,6 @@ docker compose up      # frontend :3000, docs :3001, engine :4011, mockbank :401
   `targetUrl` must use the service name — `http://mockbank:4010`, not
   `http://localhost:4010` (inside the engine container `localhost` is the
   container itself).
-- **Ports**: identical to the dev fan-out, so `pnpm dev` and
-  `docker compose up` cannot run at the same time.
 
 <Callout title="First run only">
   The frontend's auth schema must exist before sign-in works. If

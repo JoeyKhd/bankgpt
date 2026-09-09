@@ -1,27 +1,41 @@
-# One command, whole product: frontend :3000, engine :4011, mockbank :4010,
-# docs :3001. SQLite databases persist on named volumes.
+# One command, whole product: frontend, engine, mockbank, docs on an
+# internal Docker network. SQLite databases persist on named volumes.
+#
+# No host ports are published here — routing is configured externally
+# (Dokploy: point your domains at the internal container ports below).
 #
 #   docker compose build
 #   OPENROUTER_API_KEY=... BETTER_AUTH_SECRET=... docker compose up
 #
-# Or copy .env.example to .env and fill the values, then `docker compose up`.
+# Internal container ports (what Dokploy routes to):
+#   frontend 3000, docs 3001, engine 4011, mockbank 4010
 #
 # Reaching mockbank from inside the network: the engine runs Playwright, so
 # discovery targets must use the service name, e.g.
 #   http://mockbank:4010  (not http://localhost:4010 — inside the engine
 #   container that would be the container itself).
+#
+# Two services must be reachable from the USER'S BROWSER, so give them
+# public domains in Dokploy:
+#   - frontend (the app itself)
+#   - engine's /ws live-session channel: set NEXT_PUBLIC_ENGINE_WS_URL to
+#     the public URL, e.g. wss://engine.example.com/ws (the Next server
+#     cannot proxy WS upgrades, so the browser connects directly).
+# mockbank and docs only need public domains if you want to browse them
+# directly; the engine reaches mockbank internally either way.
 
 services:
   frontend:
     build:
       context: .
       dockerfile: apps/frontend/Dockerfile
-    ports:
-      - "${FRONTEND_HOST_PORT:-3000}:3000"
+    expose:
+      - "3000" # internal port — route your public domain here (Dokploy)
     environment:
       # REQUIRED: better-auth token signing secret (min 32 chars).
       #   openssl rand -base64 32
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET (openssl rand -base64 32)}
+      # Set to the public frontend URL in production (Dokploy domain).
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       # REQUIRED for AI features (chat + discovery models via OpenRouter).
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
@@ -30,8 +44,9 @@ services:
       # Server-side engine API base (proxied at /api/engine/*). Inside the
       # network the engine is reachable by service name.
       ENGINE_URL: http://engine:4011
-      # The BROWSER connects to the WS channel directly, so this must be the
-      # host-reachable URL, not the service name.
+      # The BROWSER connects to the WS channel directly, so this must be a
+      # PUBLICLY reachable URL (Dokploy domain for engine), never a service
+      # name.
       NEXT_PUBLIC_ENGINE_WS_URL: ${NEXT_PUBLIC_ENGINE_WS_URL:-ws://localhost:4011/ws}
       NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
     volumes:
@@ -51,8 +66,8 @@ services:
     build:
       context: .
       dockerfile: apps/engine/Dockerfile
-    ports:
-      - "${ENGINE_HOST_PORT:-4011}:4011"
+    expose:
+      - "4011" # internal port — route a public domain here for /ws (Dokploy)
     environment:
       ENGINE_PORT: "4011"
       # Persistent SQLite on the named volume (capabilities, runs,
@@ -77,8 +92,8 @@ services:
     build:
       context: .
       dockerfile: apps/mockbank/Dockerfile
-    ports:
-      - "${MOCKBANK_HOST_PORT:-4010}:4010"
+    expose:
+      - "4010" # internal port — only the engine needs it (service name)
     environment:
       # Bind all interfaces inside the container (default is 127.0.0.1,
       # which would be unreachable from the engine container).
@@ -97,8 +112,8 @@ services:
     build:
       context: .
       dockerfile: apps/docs/Dockerfile
-    ports:
-      - "${DOCS_HOST_PORT:-3001}:3001"
+    expose:
+      - "3001" # internal port — route a public domain here (Dokploy)
     restart: unless-stopped
 
 # Persistent storage for the two SQLite databases (survive

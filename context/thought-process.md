@@ -1795,3 +1795,33 @@ but does not replace, the report or the runtime evidence in `/evidence/`.
   `.dockerignore`, `.env.example`, `apps/frontend/next.config.ts`,
   `apps/docs/next.config.ts`, `README.md`,
   `apps/docs/content/docs/running-locally.mdx`, `AGENTS.md`; D-059.
+
+### D-063 — 2026-09-09T14:40:54Z — Compose stops publishing host ports; Dokploy routes to internal ports
+
+- **Status:** accepted
+- **Decision/change:** Removed all `ports:` host-publishing blocks from
+  `docker-compose.yaml` and replaced them with `expose:` (documentation of
+  the internal container ports: frontend 3000, docs 3001, engine 4011,
+  mockbank 4010). Public routing is now configured externally in Dokploy,
+  which points domains at those internal ports. Dropped the
+  `FRONTEND_HOST_PORT` / `DOCS_HOST_PORT` / `ENGINE_HOST_PORT` /
+  `MOCKBANK_HOST_PORT` overrides from `.env.example` and added production
+  URL guidance instead: `BETTER_AUTH_URL`, `NEXT_PUBLIC_SITE_URL`, and —
+  important — `NEXT_PUBLIC_ENGINE_WS_URL` must be a public URL
+  (`wss://engine.example.com/ws`) because the BROWSER connects to the
+  engine's `/ws` live-session channel directly; the Next server cannot
+  proxy WebSocket upgrades. Header comments in `docker-compose.yaml`,
+  README, and the docs `running-locally` Docker section explain which
+  services need public domains (frontend always; engine for `/ws`;
+  mockbank/docs only if browsed directly).
+- **Why:** Owner feedback — the ports will be added manually through
+  Dokploy (internal ports), so compose should not publish them.
+- **Consequences/follow-up:** The compose stack can now run alongside
+  `pnpm dev` without host-port collisions (nothing binds the host).
+  Verified after the change: all four containers healthy with zero
+  published host ports, internal DNS works (engine→mockbank 200,
+  frontend→engine health 200, frontend /login 200), the seeded volume
+  carries the better-auth schema (user/session/account/verification),
+  sign-up + sign-in succeed, and Chromium still launches in the engine.
+- **References:** `docker-compose.yaml`, `.env.example`, `README.md`,
+  `apps/docs/content/docs/running-locally.mdx`, `AGENTS.md`; D-062.

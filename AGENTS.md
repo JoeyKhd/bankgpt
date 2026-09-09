@@ -274,7 +274,11 @@ for frontend work.
 - **One `Dockerfile` per app** (`apps/<app>/Dockerfile`, repo-root build
   context) plus a root `docker-compose.yaml` that starts everything the
   product needs: frontend :3000, docs :3001, engine :4011 (Chromium
-  pre-installed for discovery/replay), mockbank :4010.
+  pre-installed for discovery/replay), mockbank :4010. Compose publishes
+  **no host ports** — services talk on the internal network and routing is
+  configured externally in Dokploy (point domains at those internal
+  ports). The engine's `/ws` channel needs its own public domain (the
+  browser connects directly; set `NEXT_PUBLIC_ENGINE_WS_URL`).
 - **SQLite persistence is via named volumes**, never bind mounts or
   image state: `frontend-data` → `/data/app.sqlite` and `engine-data` →
   `/data/engine.sqlite` (`DATABASE_URL` / `ENGINE_DB_PATH` in compose).
@@ -287,8 +291,8 @@ for frontend work.
 - Inside the compose network the engine's Playwright browser reaches
   mockbank by service name (`http://mockbank:4010`); `localhost` there is
   the container itself.
-- `docker compose up` and `pnpm dev` use the same ports — never both.
-
+- Because compose publishes nothing on the host, the container stack can
+  run alongside `pnpm dev` without port collisions.
 ## Linting and formatting
 
 - Lint with **ESLint** (`eslint-config-next` core-web-vitals + typescript) and
